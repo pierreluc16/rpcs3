@@ -1,4 +1,4 @@
-name: Capture Windows 11 ARM (Alternative Python Pillow)
+name: Capture d'écran via Ruby (Windows ARM64)
 
 on:
   push:
@@ -6,47 +6,50 @@ on:
   workflow_dispatch:
 
 jobs:
-  screenshot-python:
+  screenshot-ruby:
     runs-on: windows-11-arm
 
     steps:
       - name: Récupérer le code du dépôt
         uses: actions/checkout@v4
 
-      - name: Configurer l'environnement Python
-        uses: actions/setup-python@v5
+      - name: Configurer l'environnement Ruby
+        uses: ruby/setup-ruby@v1
         with:
-          python-version: '3.11'
+          ruby-version: '3.3' # Version stable de Ruby
 
-      - name: Installer les dépendances d'imagerie
+      - name: Installer les Gems requis
         shell: powershell
         run: |
-          # Pillow utilise l'API ImageGrab native de Windows
-          pip install Pillow
+          # Cuprite contrôle Chrome via le protocole CDP (Chrome DevTools Protocol)
+          gem install capybara cuprite
 
-      - name: Lancer l'application cible
+      - name: Exécuter la capture d'écran via Ruby
         shell: powershell
         run: |
-          # Exemple : Lancer le WordPad de Windows
-          Start-Process write.exe
-          Start-Sleep -Seconds 3
+          # Création et exécution du script à la volée
+          @"
+          require 'capybara/cuprite'
 
-      - name: Prendre la capture d'écran via Python
-        shell: powershell
-        run: |
-          python -c "
-          from PIL import ImageGrab
+          # Configurer Capybara pour utiliser le pilote Cuprite (Chrome Headless)
+          Capybara.register_driver :cuprite do |app|
+            Capybara::Cuprite::Driver.new(app, window_size: [1920, 1080], headless: true)
+          end
+
+          session = Capybara::Session.new(:cuprite)
           
-          # Capture l'intégralité de l'écran principal
-          screenshot = ImageGrab.grab()
+          # Naviguer vers l'URL souhaitée
+          session.visit('https://github.com')
           
-          # Sauvegarde l'image au format PNG
-          screenshot.save('python-screenshot.png')
-          print('Capture d''écran générée avec succès !')
-          "
+          # Prendre la capture d'écran
+          session.save_screenshot('ruby-screenshot.png', full: true)
+          puts 'Capture d’écran générée avec Ruby avec succès !'
+          "@ | Out-File -FilePath capture.rb -Encoding utf8
+          
+          ruby capture.rb
 
       - name: Télécharger la capture d'écran
         uses: actions/upload-artifact@v4
         with:
-          name: capture-python
-          path: python-screenshot.png
+          name: capture-ruby
+          path: ruby-screenshot.png
