@@ -1,24 +1,22 @@
-# .github/workflows/ci-pipeline.yml
-name: NodeJS CI Pipeline
+name: Check Architecture Workflow
 
-# Trigger the workflow on pushes or pull requests to the main branch
 on:
   push:
     branches: [ main ]
   pull_request:
     branches: [ main ]
+  workflow_dispatch: # Permet de lancer le workflow manuellement depuis GitHub
 
 jobs:
-  test-and-build:
-    # Specify the virtual environment runner
+  check-architecture:
     runs-on: windows-11-arm
 
     steps:
       - name: Check System Architecture
-  shell: bash
-  run: |
-    echo "Python platform.machine(): $(python -c 'import platform; print(platform.machine())')"
-    echo "Python platform.architecture(): $(python -c 'import platform; print(platform.architecture())')"
-    echo "Python platform.processor(): $(python -c 'import platform; print(platform.processor())')"
-    echo "PowerShell \$env:PROCESSOR_ARCHITECTURE: $PROCESSOR_ARCHITECTURE"
-    echo "PowerShell \$env:PROCESSOR_IDENTIFIER: $PROCESSOR_IDENTIFIER"
+        shell: bash
+        run: |
+          echo "Python platform.machine(): $(python -c 'import platform; print(platform.machine())')"
+          echo "Python platform.architecture(): $(python -c 'import platform; print(platform.architecture())')"
+          echo "Python platform.processor(): $(python -c 'import platform; print(platform.processor())')"
+          echo "PowerShell \$env:PROCESSOR_ARCHITECTURE: $PROCESSOR_ARCHITECTURE"
+          echo "PowerShell \$env:PROCESSOR_IDENTIFIER: $PROCESSOR_IDENTIFIER"
