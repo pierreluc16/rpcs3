@@ -1,57 +1,57 @@
-name: Windows 11 ARM Active Window Test
+name: Windows 11 ARM Desktop Screenshot
 
 on:
-  workflow_dispatch: # Allows manual trigger from the GitHub Actions dashboard
+  workflow_dispatch: # Allows manual triggering from your GitHub Actions UI
 
 jobs:
-  check-gui-focus:
-    name: Identify Active Window
-    runs-on: windows-11-arm # Explicitly targets the Windows 11 ARM64 environment
+  capture-desktop:
+    name: Run and Take Screenshot
+    runs-on: windows-11-arm # Target the Windows 11 ARM64 environment image
 
     steps:
-      - name: System Diagnostics
+      - name: Wait for Desktop Shell
         shell: powershell
         run: |
-          Write-Host "=== System Architecture ==="
-          $env:PROCESSOR_ARCHITECTURE
-          Write-Host "=== Windows Version ==="
-          [System.Environment]::OSVersion.Version
-
-      - name: Wait for Shell Initialization
-        shell: powershell
-        run: |
-          Write-Host "Waiting for the desktop shell environment to settle..."
+          Write-Host "Allowing 5 seconds for the desktop shell to initialize..."
           Start-Sleep -Seconds 5
 
-      - name: Capture Foreground Window Title
+      - name: Capture Screen via PowerShell and .NET
         shell: powershell
         run: |
-          # Define the Win32 API functions required to query the window manager
-          $code = @'
-          [DllImport("user32.dll")]
-          public static extern IntPtr GetForegroundWindow();
-          [DllImport("user32.dll")]
-          public static extern int GetWindowText(IntPtr hWnd, System.Text.StringBuilder text, int count);
-          '@
-          $API = Add-Type -MemberDefinition $code -Name "Win32GetActiveWindow" -Namespace "Win32" -PassThru
+          # Load necessary Assemblies for graphics rendering
+          Add-Type -AssemblyName System.Windows.Forms
+          Add-Type -AssemblyName System.Drawing
+
+          # Detect primary screen dimensions
+          $Screen = [System.Windows.Forms.SystemInformation]::VirtualScreen
+          $Width  = $Screen.Width
+          $Height = $Screen.Height
+
+          Write-Host "Detected Screen Resolution: $Width x $Height"
+
+          # Instantiate bitmap canvas object
+          $Bitmap  = New-Object System.Drawing.Bitmap($Width, $Height)
+          $Graphic = [System.Drawing.Graphics]::FromImage($Bitmap)
+
+          # Copy display stream contents to bitmap memory canvas
+          $Graphic.CopyFromScreen($Screen.Left, $Screen.Top, 0, 0, $Bitmap.Size)
+
+          # Ensure target folder exists and save the output image
+          $TargetDir = "$env:GITHUB_WORKSPACE\artifacts"
+          if (!(Test-Path $TargetDir)) { New-Item -ItemType Directory -Path $TargetDir | Out-Null }
           
-          # Retrieve the pointer for the active window
-          $handle = $API::GetForegroundWindow()
-          $title = New-Object System.Text.StringBuilder 256
-          $API::GetWindowText($handle, $title, 256) | Out-Null
+          $OutputPath = "$TargetDir\desktop-screenshot.png"
+          $Bitmap.Save($OutputPath, [System.Drawing.Imaging.ImageFormat]::Png)
+
+          # Dispose objects to free system resource allocations
+          $Graphic.Dispose()
+          $Bitmap.Dispose()
           
-          $activeTitle = $title.ToString()
-          
-          Write-Host "--------------------------------------------------"
-          Write-Host "The current active window title is: '$activeTitle'"
-          Write-Host "--------------------------------------------------"
-          
-          # Automated test validation
-          if ([string]::IsNullOrEmpty($activeTitle)) {
-             Write-Host "Notice: The foreground window has an empty title (common for desktop or worker shells)."
-          } elseif ($activeTitle -match "Privacy" -or $activeTitle -match "Experience" -or $activeTitle -match "OOBE") {
-             Write-Error "Test Alert: A setup dialog or privacy window is intercepting focus!"
-             exit 1
-          } else {
-             Write-Host "Success: Focus tracking is operating normally."
-          }
+          Write-Host "Desktop frame captured successfully at: $OutputPath"
+
+      - name: Upload Screenshot as Pipeline Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-arm-desktop-view
+          path: artifacts/desktop-screenshot.png
+          if-no-files-found: error
