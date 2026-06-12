@@ -1,35 +1,36 @@
-name: Capture Desktop GUI Screenshot
+name: Screenshot Ubuntu Desktop
 
-on: [push]
+on:
+  push:
+  workflow_dispatch:
 
 jobs:
-  screenshot:
+  capture:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install System Dependencies
+      - name: Installer le serveur d'affichage et l'outil de capture
         run: |
           sudo apt-get update
-          # Install Xvfb, a screenshot utility, and any dependencies your app needs
-          sudo apt-get install -y xvfb scrot imagemagick
+          sudo apt-get install -y xvfb scrot
 
-      - name: Run GUI App and Capture Screen
+      - name: Initialiser le bureau et prendre la capture
         run: |
-          # Start your GUI application in the background using xvfb-run
-          # (Replace 'echo "Starting App"' with your executable, e.g., python main.py)
-          xvfb-run --server-args="-screen 0 1280x1024x24" your-gui-app &
+          # 1. Démarrer le bureau virtuel (Résolution Full HD 1080p)
+          Xvfb :99 -screen 0 1920x1080x24 &
+          export DISPLAY=:99
+          sleep 2 # Laisser le bureau s'initialiser
           
-          # Give the application 5 seconds to fully launch and render
-          sleep 5
+          # [Optionnel] Lancez vos scripts ou outils ici si vous voulez peupler le bureau
           
-          # Capture the full virtual desktop screen
-          xvfb-run --server-args="-screen 0 1280x1024x24" scrot desktop-capture.png
+          # 2. Capturer instantanément tout le bureau
+          scrot desktop_capture.png
 
-      - name: Upload Screenshot Artifact
+      - name: Télécharger l'image finale
         uses: actions/upload-artifact@v4
         with:
-          name: gui-screenshots
-          path: desktop-capture.png
+          name: ubuntu-desktop-screenshot
+          path: desktop_capture.png
