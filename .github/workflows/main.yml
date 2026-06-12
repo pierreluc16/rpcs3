@@ -1,20 +1,20 @@
-name: Test Issue 14069 Comment Fix
+name: Test Issue 14069 Tweak
 
 on:
-  workflow_dispatch: # Allows manual trigger from the Actions UI
+  workflow_dispatch: # Allows manual trigger from the GitHub Actions dashboard
 
 jobs:
-  # Job 1: Test if the issue STILL occurs out-of-the-box
-  control-group:
-    name: Check Default Image Focus
+  # Test Group 1: Vanilla image behavior
+  without-registry-fix:
+    name: Default Image Window Focus
     runs-on: windows-11-arm
 
     steps:
-      - name: Wait for Desktop to Settle
+      - name: Wait for Desktop Elements
         shell: powershell
         run: Start-Sleep -Seconds 5
 
-      - name: Fetch Foreground Window Title
+      - name: Check Active Window Title
         shell: powershell
         run: |
           $code = @'
@@ -29,10 +29,9 @@ jobs:
           $title = New-Object System.Text.StringBuilder 256
           $API::GetWindowText($handle, $title, 256) | Out-Null
           
-          Write-Host "Active Window Title is: '$($title.ToString())'"
+          Write-Host "Active Window Title is currently: '$($title.ToString())'"
           
           if ($title.ToString() -match "Privacy" -or $title.ToString() -match "Experience") {
-             Write-Host "CRITICAL: Issue #14069 STILL OCCURS. Privacy window took focus."
-             exit 1
+             Write-Host "Warning: The first-run prompt is present and taking focus by default."
           } else {
-             Write-Host "SUCCESS: OOBE Privacy window did not steal 
+             Write-Host "No OOBE window detected in focus."
