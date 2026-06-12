@@ -1,27 +1,27 @@
-name: Verify Issue 14067
+name: Test Firefly Repository
 
 on:
-  workflow_dispatch: # Allows you to trigger it manually from the Actions tab
+  workflow_dispatch: # Allows you to run this manually from the GitHub UI
 
 jobs:
-  check-apt-permission:
-    # Issue #14067 explicitly occurs on GitHub's Ubuntu 22.04 ARM64 platform
+  # Test 1: The original failing environment (ARM64)
+  test-arm64:
+    name: Test on Ubuntu 22.04 ARM64
     runs-on: ubuntu-22.04-arm
 
     steps:
-      - name: System Information
+      - name: Add Firefly repository
         run: |
-          echo "=== Runner Architecture ==="
-          uname -m
-          echo "=== Image Version Info ==="
-          cat /etc/os-release
+          echo "deb [trusted=yes] http://wiki.t-firefly.com/firefly-ubuntu-repo jammy main" | sudo tee /etc/apt/sources.list.d/firefly.list
+          sudo apt-get update
 
-      - name: Add Third Party Apt Repository
-        run: |
-          # This copies the setup block exactly from the bug report
-          echo "deb [trusted=yes] http://t-firefly.com jammy main" | sudo tee /etc/apt/sources.list.d/firefly.list
+  # Test 2: The baseline environment (Standard x64)
+  test-x64:
+    name: Test on Ubuntu 22.04 x64
+    runs-on: ubuntu-22.04
 
-      - name: Execute Package Index Update
+    steps:
+      - name: Add Firefly repository
         run: |
-          # If the bug is still active, this step will fail with a permission/sandbox error
+          echo "deb [trusted=yes] http://wiki.t-firefly.com/firefly-ubuntu-repo jammy main" | sudo tee /etc/apt/sources.list.d/firefly.list
           sudo apt-get update
