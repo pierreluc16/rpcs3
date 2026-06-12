@@ -1,4 +1,4 @@
-name: Capture Windows 11 ARM (Alternative Java AWT)
+name: Capture Windows 11 ARM (Alternative Node.js)
 
 on:
   push:
@@ -6,69 +6,52 @@ on:
   workflow_dispatch:
 
 jobs:
-  screenshot-java:
+  screenshot-node:
     runs-on: windows-11-arm
 
     steps:
       - name: Récupérer le code du dépôt
         uses: actions/checkout@v4
 
-      - name: Configurer le JDK (Java)
-        uses: actions/setup-java@v4
+      - name: Configurer Node.js
+        uses: actions/setup-node@v4
         with:
-          distribution: 'temurin'
-          java-version: '17'
+          node-version: '20'
+
+      - name: Installer la bibliothèque de capture d'écran
+        shell: powershell
+        run: |
+          npm install screenshot-desktop
 
       - name: Lancer votre application de bureau
         shell: powershell
         run: |
-          # LANCEZ VOTRE LOGICIEL ICI
-          # Exemple : Lancer l'Explorateur de fichiers Windows
-          Start-Process explorer.exe
+          # LANCEZ VOTRE APPLICATION ICI
+          # Exemple : Lancer l'Éditeur de registre Windows
+          Start-Process regedit.exe
           Start-Sleep -Seconds 3
 
-      - name: Compiler et Exécuter le script de capture d'écran
+      - name: Prendre la capture d'écran via Node.js
         shell: powershell
         run: |
-          # Création du code source Java à la volée
+          # Création et exécution du script Node.js à la volée
           @"
-          import java.awt.Rectangle;
-          import java.awt.Robot;
-          import java.awt.Toolkit;
-          import java.awt.image.BufferedImage;
-          import java.io.File;
-          import javax.imageio.ImageIO;
+          const screenshot = require('screenshot-desktop');
+          const fs = require('fs');
 
-          public class CaptureScreen {
-              public static void main(String[] args) {
-                  try {
-                      // Initialiser la classe Robot de gestion de l'affichage OS
-                      Robot robot = new Robot();
-                      
-                      // Détecter automatiquement la taille de l'écran principal
-                      Rectangle screenRect = new Rectangle(Toolkit.getDefaultToolkit().getScreenSize());
-                      
-                      // Capturer les pixels de l'écran
-                      BufferedImage screenFullImage = robot.createScreenCapture(screenRect);
-                      
-                      // Enregistrer l'image sur le disque
-                      ImageIO.write(screenFullImage, "png", new File("java-screenshot.png"));
-                      
-                      System.out.println("Capture d'ecran Java reussie !");
-                  } catch (Exception ex) {
-                      System.err.println("Erreur : " + ex.getMessage());
-                      System.exit(1);
-                  }
-              }
-          }
-          "@ | Out-File -FilePath CaptureScreen.java -Encoding utf8
+          screenshot({ format: 'png' }).then((img) => {
+              fs.writeFileSync('node-screenshot.png', img);
+              console.log('Capture d\'écran Node.js générée avec succès !');
+          }).catch((err) => {
+              console.error('Erreur lors de la capture :', err);
+              process.exit(1);
+          });
+          "@ | Out-File -FilePath capture.js -Encoding utf8
 
-          # Compilation et exécution directe
-          javac CaptureScreen.java
-          java CaptureScreen
+          node capture.js
 
       - name: Télécharger la capture d'écran
         uses: actions/upload-artifact@v4
         with:
-          name: capture-java
-          path: java-screenshot.png
+          name: capture-node
+          path: node-screenshot.png
