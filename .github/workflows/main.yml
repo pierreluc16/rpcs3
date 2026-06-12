@@ -1,22 +1,32 @@
-name: Test Issue 14069 Tweak
+name: Windows 11 ARM Active Window Test
 
 on:
   workflow_dispatch: # Allows manual trigger from the GitHub Actions dashboard
 
 jobs:
-  # Test Group 1: Vanilla image behavior
-  without-registry-fix:
-    name: Default Image Window Focus
-    runs-on: windows-11-arm
+  check-gui-focus:
+    name: Identify Active Window
+    runs-on: windows-11-arm # Explicitly targets the Windows 11 ARM64 environment
 
     steps:
-      - name: Wait for Desktop Elements
-        shell: powershell
-        run: Start-Sleep -Seconds 5
-
-      - name: Check Active Window Title
+      - name: System Diagnostics
         shell: powershell
         run: |
+          Write-Host "=== System Architecture ==="
+          $env:PROCESSOR_ARCHITECTURE
+          Write-Host "=== Windows Version ==="
+          [System.Environment]::OSVersion.Version
+
+      - name: Wait for Shell Initialization
+        shell: powershell
+        run: |
+          Write-Host "Waiting for the desktop shell environment to settle..."
+          Start-Sleep -Seconds 5
+
+      - name: Capture Foreground Window Title
+        shell: powershell
+        run: |
+          # Define the Win32 API functions required to query the window manager
           $code = @'
           [DllImport("user32.dll")]
           public static extern IntPtr GetForegroundWindow();
@@ -25,13 +35,23 @@ jobs:
           '@
           $API = Add-Type -MemberDefinition $code -Name "Win32GetActiveWindow" -Namespace "Win32" -PassThru
           
+          # Retrieve the pointer for the active window
           $handle = $API::GetForegroundWindow()
           $title = New-Object System.Text.StringBuilder 256
           $API::GetWindowText($handle, $title, 256) | Out-Null
           
-          Write-Host "Active Window Title is currently: '$($title.ToString())'"
+          $activeTitle = $title.ToString()
           
-          if ($title.ToString() -match "Privacy" -or $title.ToString() -match "Experience") {
-             Write-Host "Warning: The first-run prompt is present and taking focus by default."
+          Write-Host "--------------------------------------------------"
+          Write-Host "The current active window title is: '$activeTitle'"
+          Write-Host "--------------------------------------------------"
+          
+          # Automated test validation
+          if ([string]::IsNullOrEmpty($activeTitle)) {
+             Write-Host "Notice: The foreground window has an empty title (common for desktop or worker shells)."
+          } elseif ($activeTitle -match "Privacy" -or $activeTitle -match "Experience" -or $activeTitle -match "OOBE") {
+             Write-Error "Test Alert: A setup dialog or privacy window is intercepting focus!"
+             exit 1
           } else {
-             Write-Host "No OOBE window detected in focus."
+             Write-Host "Success: Focus tracking is operating normally."
+          }
