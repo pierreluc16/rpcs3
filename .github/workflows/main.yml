@@ -1,25 +1,22 @@
-name: Verify Issue 14069 (Windows 11 ARM GUI Focus)
+name: Test Issue 14069 Comment Fix
 
 on:
-  workflow_dispatch: # Allows you to trigger this manually from the GitHub UI
+  workflow_dispatch: # Allows manual trigger from the Actions UI
 
 jobs:
-  check-gui-focus:
-    # Explicitly target the Windows 11 ARM64 runner image
+  # Job 1: Test if the issue STILL occurs out-of-the-box
+  control-group:
+    name: Check Default Image Focus
     runs-on: windows-11-arm
 
     steps:
-      - name: Environment Diagnostics
-        run: |
-          Write-Host "=== System Architecture ==="
-          $env:PROCESSOR_ARCHITECTURE
-          Write-Host "=== Operating System ==="
-          [System.Environment]::OSVersion.Version
+      - name: Wait for Desktop to Settle
+        shell: powershell
+        run: Start-Sleep -Seconds 5
 
-      - name: Check Active Foreground Window Title
+      - name: Fetch Foreground Window Title
         shell: powershell
         run: |
-          # PowerShell snippet to pull the currently focused window title
           $code = @'
           [DllImport("user32.dll")]
           public static extern IntPtr GetForegroundWindow();
@@ -28,19 +25,14 @@ jobs:
           '@
           $API = Add-Type -MemberDefinition $code -Name "Win32GetActiveWindow" -Namespace "Win32" -PassThru
           
-          # Give the desktop environment a few seconds to fully initialize
-          Start-Sleep -Seconds 5
-          
           $handle = $API::GetForegroundWindow()
           $title = New-Object System.Text.StringBuilder 256
           $API::GetWindowText($handle, $title, 256) | Out-Null
           
-          Write-Host "The current active window title is: '$($title.ToString())'"
+          Write-Host "Active Window Title is: '$($title.ToString())'"
           
-          # Evaluate if the first-run experience screen is stealing focus
           if ($title.ToString() -match "Privacy" -or $title.ToString() -match "Experience") {
-             Write-Error "Verification Failed: The first-run privacy screen is taking focus! Issue #14069 is STILL OCCURRING."
+             Write-Host "CRITICAL: Issue #14069 STILL OCCURS. Privacy window took focus."
              exit 1
           } else {
-             Write-Host "Success: No blocking privacy settings window detected in focus."
-          }
+             Write-Host "SUCCESS: OOBE Privacy window did not steal 
