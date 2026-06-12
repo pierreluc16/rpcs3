@@ -1,57 +1,53 @@
-name: Windows 11 ARM Desktop Screenshot
+name: Capture Windows Server Desktop
 
 on:
-  workflow_dispatch: # Allows manual triggering from your GitHub Actions UI
+  push:
+    branches: [ main ]
+  workflow_dispatch: # Allows manual triggering from the GitHub UI
 
 jobs:
-  capture-desktop:
-    name: Run and Take Screenshot
-    runs-on: windows-11-arm # Target the Windows 11 ARM64 environment image
+  screenshot-job:
+    runs-on: windows-latest # Resolves to the latest Windows Server runner
 
     steps:
-      - name: Wait for Desktop Shell
-        shell: powershell
-        run: |
-          Write-Host "Allowing 5 seconds for the desktop shell to initialize..."
-          Start-Sleep -Seconds 5
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-      - name: Capture Screen via PowerShell and .NET
+      - name: Execute UI Actions
+        run: |
+          # Insert your UI tests, desktop apps, or commands to capture here
+          echo "Starting application context..."
+
+      - name: Capture Desktop Screenshot via PowerShell
         shell: powershell
         run: |
-          # Load necessary Assemblies for graphics rendering
           Add-Type -AssemblyName System.Windows.Forms
           Add-Type -AssemblyName System.Drawing
 
-          # Detect primary screen dimensions
-          $Screen = [System.Windows.Forms.SystemInformation]::VirtualScreen
-          $Width  = $Screen.Width
-          $Height = $Screen.Height
+          # Get total screen bounds
+          $screen = [System.Windows.Forms.Screen]::PrimaryScreen
+          $bounds = $screen.Bounds
 
-          Write-Host "Detected Screen Resolution: $Width x $Height"
+          # Create Bitmap object
+          $bmp = New-Object System.Drawing.Bitmap($bounds.Width, $bounds.Height)
+          $graphics = [System.Drawing.Graphics]::FromImage($bmp)
 
-          # Instantiate bitmap canvas object
-          $Bitmap  = New-Object System.Drawing.Bitmap($Width, $Height)
-          $Graphic = [System.Drawing.Graphics]::FromImage($Bitmap)
+          # Copy the raw screen contents
+          $graphics.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size)
 
-          # Copy display stream contents to bitmap memory canvas
-          $Graphic.CopyFromScreen($Screen.Left, $Screen.Top, 0, 0, $Bitmap.Size)
+          # Ensure target folder exists and save image
+          New-Item -ItemType Directory -Force -Path ".\screenshots"
+          $outputPath = ".\screenshots\desktop-capture.png"
+          $bmp.Save($outputPath, [System.Drawing.Imaging.ImageFormat]::Png)
 
-          # Ensure target folder exists and save the output image
-          $TargetDir = "$env:GITHUB_WORKSPACE\artifacts"
-          if (!(Test-Path $TargetDir)) { New-Item -ItemType Directory -Path $TargetDir | Out-Null }
-          
-          $OutputPath = "$TargetDir\desktop-screenshot.png"
-          $Bitmap.Save($OutputPath, [System.Drawing.Imaging.ImageFormat]::Png)
+          # Clean up system resources
+          $graphics.Dispose()
+          $bmp.Dispose()
+          Write-Output "Screenshot successfully saved to $outputPath"
 
-          # Dispose objects to free system resource allocations
-          $Graphic.Dispose()
-          $Bitmap.Dispose()
-          
-          Write-Host "Desktop frame captured successfully at: $OutputPath"
-
-      - name: Upload Screenshot as Pipeline Artifact
+      - name: Upload Screenshot as Build Artifact
         uses: actions/upload-artifact@v4
+        if: always() # Ensures the screenshot uploads even if preceding steps fail
         with:
-          name: windows-arm-desktop-view
-          path: artifacts/desktop-screenshot.png
-          if-no-files-found: error
+          name: windows-server-screenshot
+          path: .\screenshots\desktop-capture.png
