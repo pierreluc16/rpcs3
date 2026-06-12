@@ -1,45 +1,35 @@
-name: Capture Ubuntu Desktop Screenshot
+name: Capture Desktop GUI Screenshot
 
-on:
-  push:
-    branches: [ main ]
-  workflow_dispatch: # Allows you to trigger manually from the GitHub UI
+on: [push]
 
 jobs:
-  take-screenshot:
+  screenshot:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Install Display and Screenshot Tools
+      - name: Install System Dependencies
         run: |
           sudo apt-get update
-          # Xvfb provides the virtual screen, scrot captures it
-          sudo apt-get install -y xvfb scrot
+          # Install Xvfb, a screenshot utility, and any dependencies your app needs
+          sudo apt-get install -y xvfb scrot imagemagick
 
-      - name: Start Virtual Framebuffer and Run App
+      - name: Run GUI App and Capture Screen
         run: |
-          # 1. Start Xvfb on display port :99 with a common desktop resolution
-          Xvfb :99 -screen 0 1920x1080x24 &
+          # Start your GUI application in the background using xvfb-run
+          # (Replace 'echo "Starting App"' with your executable, e.g., python main.py)
+          xvfb-run --server-args="-screen 0 1280x1024x24" your-gui-app &
           
-          # 2. Export the DISPLAY variable so applications know where to draw
-          export DISPLAY=:99
+          # Give the application 5 seconds to fully launch and render
+          sleep 5
           
-          # 3. (Optional) Give Xvfb a moment to fully initialize
-          sleep 2
-          
-          # 4. Launch your application here in the background (Example: an app or browser)
-          # google-chrome --no-sandbox http://localhost:3000 & 
-          # sleep 5 # Give your app time to load
-          
-          # 5. Take the full desktop screenshot using scrot
-          mkdir -p output
-          scrot output/desktop-screenshot.png
+          # Capture the full virtual desktop screen
+          xvfb-run --server-args="-screen 0 1280x1024x24" scrot desktop-capture.png
 
       - name: Upload Screenshot Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ubuntu-desktop-capture
-          path: output/desktop-screenshot.png
+          name: gui-screenshots
+          path: desktop-capture.png
