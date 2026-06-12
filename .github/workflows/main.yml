@@ -1,4 +1,4 @@
-name: Capture Bureau Alternative (XFCE)
+name: Capture Windows 11 ARM (Alternative Boxcutter)
 
 on:
   push:
@@ -6,40 +6,35 @@ on:
   workflow_dispatch:
 
 jobs:
-  xfce-capture:
-    runs-on: ubuntu-latest
+  screenshot-boxcutter:
+    runs-on: windows-11-arm
 
     steps:
       - name: Récupérer le code du dépôt
         uses: actions/checkout@v4
 
-      - name: Installer les outils graphiques et XFCE Screenshooter
+      - name: Installer Boxcutter via Chocolatey
+        shell: powershell
         run: |
-          sudo apt-get update
-          # xfce4-screenshooter est robuste et conçu spécifiquement pour le bureau Linux
-          sudo apt-get install -y xvfb xfce4-screenshooter fluxbox
+          # Chocolatey est pré-installé sur les runners Windows de GitHub
+          choco install boxcutter -y
 
-      - name: Lancer le Bureau et Prendre la Photo
+      - name: Lancer votre application de bureau
+        shell: powershell
         run: |
-          # 1. Initialiser le serveur d'affichage virtuel en Full HD
-          Xvfb :99 -screen 0 1920x1080x24 &
-          export DISPLAY=:99
-          sleep 2
+          # LANCEZ VOTRE APPLICATION ICI
+          # Exemple : Ouvrir la calculatrice Windows
+          Start-Process calc.exe
+          Start-Sleep -Seconds 3
 
-          # 2. Lancer un gestionnaire de fenêtres léger (Fluxbox)
-          fluxbox &
-          sleep 1
-
-          # 3. LANCEZ VOTRE APPLICATION DE BUREAU ICI
-          # Exemple : exécuter votre programme Linux en arrière-plan
-          # ./mon-application-desktop &
-          # sleep 3
-
-          # 4. Prendre la capture d'écran de tout le bureau (--fullscreen)
-          xfce4-screenshooter --fullscreen --save desktop-alternative.png
+      - name: Prendre la capture d'écran du bureau
+        shell: powershell
+        run: |
+          # Capturer tout l'écran et enregistrer sous forme de fichier PNG
+          boxcutter -f boxcutter-screenshot.png
 
       - name: Télécharger la capture d'écran
         uses: actions/upload-artifact@v4
         with:
-          name: capture-bureau-xfce
-          path: desktop-alternative.png
+          name: capture-boxcutter
+          path: boxcutter-screenshot.png
