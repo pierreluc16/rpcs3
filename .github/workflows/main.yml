@@ -1,24 +1,28 @@
-name: Test Windows 11 ARM 7z Archive
+name: Test Issue 14067 (APT Repo Permission ARM64)
 
 on:
-  workflow_dispatch: # Allows manual trigger from the GitHub Actions UI
+  workflow_dispatch: # Allows manual triggering from the GitHub Actions UI
 
 jobs:
-  build-archive:
-    runs-on: windows-11-arm
-
+  reproduce-apt-error:
+    # IMPORTANT: You must use the dedicated GitHub ARM architecture runner
+    runs-on: ubuntu-22.04-arm
+    
     steps:
-      - name: Create File and Compress with 7z
-        # Leaving shell empty defaults to PowerShell (pwsh) which recognizes Out-File
+      - name: Check OS Architecture & Environment Info
         run: |
-          'test' | Out-File test.txt
-          7z a hello.7z test.txt
+          echo "=== Architecture ==="
+          uname -m
+          echo "=== User Privileges ==="
+          whoami
+          id
 
-      - name: Verify Archive Creation
+      - name: Add Third Party Repository (From Issue 14067)
         run: |
-          if (Test-Path hello.7z) {
-              Write-Host "Success: hello.7z was created!"
-              7z l hello.7z
-          } else {
-              Write-Error "Error: hello.7z was not found."
-          }
+          # Injecting the specific repository setup mentioned in the issue
+          echo "deb [trusted=yes] http://t-firefly.com jammy main" | sudo tee /etc/apt/sources.list.d/firefly.list
+
+      - name: Run APT Update (The Failing Step)
+        run: |
+          # This is where the sandbox/directory permission error occurs
+          sudo apt-get update
