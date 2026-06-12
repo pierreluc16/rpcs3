@@ -1,8 +1,32 @@
-- name: Take macOS Desktop Screenshot
-  run: screencapture -x screenshot.png
+name: macOS Screenshot Workflow
 
-- name: Upload Screenshot Artifact
-  uses: actions/upload-artifact@v4
-  with:
-    name: macos-screenshot
-    path: screenshot.png
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch: # Permet de lancer le workflow manuellement
+
+jobs:
+  capture-screen:
+    runs-on: macos-latest # Utilise la version macOS stable la plus récente
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # Étape optionnelle : Lancez votre application ou vos tests ici avant la capture
+      - name: Open Application or Run Tests
+        run: |
+          echo "Lancement de l'application..."
+          # Exemple : open -a Safari https://github.com
+          # sleep 5 # Attendre que l'application s'ouvre complètement
+
+      - name: Take macOS Desktop Screenshot
+        run: screencapture -x screenshot.png
+        # L'option -x permet de désactiver le son du déclencheur
+
+      - name: Upload Screenshot Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-desktop-screenshot
+          path: screenshot.png
+          retention-days: 5 # Supprime automatiquement l'image après 5 jours
