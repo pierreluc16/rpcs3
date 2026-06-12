@@ -1,32 +1,35 @@
-name: macOS Screenshot Workflow
-
+name: Playwright Tests
 on:
   push:
-    branches: [ main ]
-  workflow_dispatch: # Permet de lancer le workflow manuellement
-
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
 jobs:
-  capture-screen:
-    runs-on: macos-latest # Utilise la version macOS stable la plus récente
-
+  test:
+    timeout-minutes: 60
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+    - name: Checkout repository
+      uses: actions/checkout@v4
 
-      # Étape optionnelle : Lancez votre application ou vos tests ici avant la capture
-      - name: Open Application or Run Tests
-        run: |
-          echo "Lancement de l'application..."
-          # Exemple : open -a Safari https://github.com
-          # sleep 5 # Attendre que l'application s'ouvre complètement
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: lts/*
 
-      - name: Take macOS Desktop Screenshot
-        run: screencapture -x screenshot.png
-        # L'option -x permet de désactiver le son du déclencheur
+    - name: Install dependencies
+      run: npm ci
 
-      - name: Upload Screenshot Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: macos-desktop-screenshot
-          path: screenshot.png
-          retention-days: 5 # Supprime automatiquement l'image après 5 jours
+    - name: Install Playwright Browsers and System Dependencies
+      run: npx playwright install --with-deps
+
+    - name: Run Playwright tests
+      run: npx playwright test
+
+    - name: Upload Screenshots & Reports
+      uses: actions/upload-artifact@v4
+      if: ${{ !cancelled() }}
+      with:
+        name: playwright-report
+        path: playwright-report/
+        retention-days: 30
