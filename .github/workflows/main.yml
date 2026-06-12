@@ -1,0 +1,24 @@
+name: Test Windows 11 ARM 7z Archive
+
+on:
+  workflow_dispatch: # Allows manual trigger from the GitHub Actions UI
+
+jobs:
+  build-archive:
+    runs-on: windows-11-arm
+
+    steps:
+      - name: Create File and Compress with 7z
+        # Leaving shell empty defaults to PowerShell (pwsh) which recognizes Out-File
+        run: |
+          'test' | Out-File test.txt
+          7z a hello.7z test.txt
+
+      - name: Verify Archive Creation
+        run: |
+          if (Test-Path hello.7z) {
+              Write-Host "Success: hello.7z was created!"
+              7z l hello.7z
+          } else {
+              Write-Error "Error: hello.7z was not found."
+          }
