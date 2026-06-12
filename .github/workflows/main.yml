@@ -1,53 +1,53 @@
-name: Capture Windows Server Desktop
+name: Windows 11 ARM64 Screenshot
 
 on:
   push:
     branches: [ main ]
-  workflow_dispatch: # Allows manual triggering from the GitHub UI
+  workflow_dispatch:
 
 jobs:
-  screenshot-job:
-    runs-on: windows-latest # Resolves to the latest Windows Server runner
+  screenshot-arm64:
+    # Use the Windows ARM64 runner image (currently in public preview)
+    runs-on: windows-11-arm
 
     steps:
-      - name: Checkout Repository
+      - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Execute UI Actions
+      - name: Run GUI App or Tests
         run: |
-          # Insert your UI tests, desktop apps, or commands to capture here
-          echo "Starting application context..."
+          echo "Launching your ARM64 application here..."
 
-      - name: Capture Desktop Screenshot via PowerShell
-        shell: powershell
+      - name: Capture Desktop Screenshot
+        shell: pwsh # Uses PowerShell Core which is fully optimized for ARM64
         run: |
+          # Load necessary .NET assemblies
           Add-Type -AssemblyName System.Windows.Forms
           Add-Type -AssemblyName System.Drawing
 
-          # Get total screen bounds
+          # Detect current ARM64 screen metrics
           $screen = [System.Windows.Forms.Screen]::PrimaryScreen
           $bounds = $screen.Bounds
 
-          # Create Bitmap object
+          # Initialize the graphic canvas
           $bmp = New-Object System.Drawing.Bitmap($bounds.Width, $bounds.Height)
           $graphics = [System.Drawing.Graphics]::FromImage($bmp)
 
-          # Copy the raw screen contents
+          # Copy the visual screen content
           $graphics.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size)
 
-          # Ensure target folder exists and save image
-          New-Item -ItemType Directory -Force -Path ".\screenshots"
-          $outputPath = ".\screenshots\desktop-capture.png"
+          # Save to repository workspace
+          $outputPath = "${{ github.workspace }}\arm64-screenshot.png"
           $bmp.Save($outputPath, [System.Drawing.Imaging.ImageFormat]::Png)
 
-          # Clean up system resources
+          # Free system memory
           $graphics.Dispose()
           $bmp.Dispose()
-          Write-Output "Screenshot successfully saved to $outputPath"
+          Write-Output "Screenshot saved successfully to $outputPath"
 
-      - name: Upload Screenshot as Build Artifact
+      - name: Upload Screenshot Artifact
         uses: actions/upload-artifact@v4
-        if: always() # Ensures the screenshot uploads even if preceding steps fail
+        if: always() # Captures the screen even if your tests fail
         with:
-          name: windows-server-screenshot
-          path: .\screenshots\desktop-capture.png
+          name: win11-arm64-desktop
+          path: arm64-screenshot.png
