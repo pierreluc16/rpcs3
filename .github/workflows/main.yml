@@ -1,28 +1,27 @@
-name: Test Issue 14067 (APT Repo Permission ARM64)
+name: Verify Issue 14067
 
 on:
-  workflow_dispatch: # Allows manual triggering from the GitHub Actions UI
+  workflow_dispatch: # Allows you to trigger it manually from the Actions tab
 
 jobs:
-  reproduce-apt-error:
-    # IMPORTANT: You must use the dedicated GitHub ARM architecture runner
+  check-apt-permission:
+    # Issue #14067 explicitly occurs on GitHub's Ubuntu 22.04 ARM64 platform
     runs-on: ubuntu-22.04-arm
-    
-    steps:
-      - name: Check OS Architecture & Environment Info
-        run: |
-          echo "=== Architecture ==="
-          uname -m
-          echo "=== User Privileges ==="
-          whoami
-          id
 
-      - name: Add Third Party Repository (From Issue 14067)
+    steps:
+      - name: System Information
         run: |
-          # Injecting the specific repository setup mentioned in the issue
+          echo "=== Runner Architecture ==="
+          uname -m
+          echo "=== Image Version Info ==="
+          cat /etc/os-release
+
+      - name: Add Third Party Apt Repository
+        run: |
+          # This copies the setup block exactly from the bug report
           echo "deb [trusted=yes] http://t-firefly.com jammy main" | sudo tee /etc/apt/sources.list.d/firefly.list
 
-      - name: Run APT Update (The Failing Step)
+      - name: Execute Package Index Update
         run: |
-          # This is where the sandbox/directory permission error occurs
+          # If the bug is still active, this step will fail with a permission/sandbox error
           sudo apt-get update
