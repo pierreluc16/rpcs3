@@ -1,36 +1,8 @@
-name: Screenshot Ubuntu Desktop
+- name: Take macOS Desktop Screenshot
+  run: screencapture -x screenshot.png
 
-on:
-  push:
-  workflow_dispatch:
-
-jobs:
-  capture:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Installer le serveur d'affichage et l'outil de capture
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y xvfb scrot
-
-      - name: Initialiser le bureau et prendre la capture
-        run: |
-          # 1. Démarrer le bureau virtuel (Résolution Full HD 1080p)
-          Xvfb :99 -screen 0 1920x1080x24 &
-          export DISPLAY=:99
-          sleep 2 # Laisser le bureau s'initialiser
-          
-          # [Optionnel] Lancez vos scripts ou outils ici si vous voulez peupler le bureau
-          
-          # 2. Capturer instantanément tout le bureau
-          scrot desktop_capture.png
-
-      - name: Télécharger l'image finale
-        uses: actions/upload-artifact@v4
-        with:
-          name: ubuntu-desktop-screenshot
-          path: desktop_capture.png
+- name: Upload Screenshot Artifact
+  uses: actions/upload-artifact@v4
+  with:
+    name: macos-screenshot
+    path: screenshot.png
