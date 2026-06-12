@@ -1,4 +1,4 @@
-name: Capture Windows 11 ARM (Alternative Boxcutter)
+name: Capture Windows 11 ARM (Alternative Python Pillow)
 
 on:
   push:
@@ -6,35 +6,47 @@ on:
   workflow_dispatch:
 
 jobs:
-  screenshot-boxcutter:
+  screenshot-python:
     runs-on: windows-11-arm
 
     steps:
       - name: Récupérer le code du dépôt
         uses: actions/checkout@v4
 
-      - name: Installer Boxcutter via Chocolatey
-        shell: powershell
-        run: |
-          # Chocolatey est pré-installé sur les runners Windows de GitHub
-          choco install boxcutter -y
+      - name: Configurer l'environnement Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
-      - name: Lancer votre application de bureau
+      - name: Installer les dépendances d'imagerie
         shell: powershell
         run: |
-          # LANCEZ VOTRE APPLICATION ICI
-          # Exemple : Ouvrir la calculatrice Windows
-          Start-Process calc.exe
+          # Pillow utilise l'API ImageGrab native de Windows
+          pip install Pillow
+
+      - name: Lancer l'application cible
+        shell: powershell
+        run: |
+          # Exemple : Lancer le WordPad de Windows
+          Start-Process write.exe
           Start-Sleep -Seconds 3
 
-      - name: Prendre la capture d'écran du bureau
+      - name: Prendre la capture d'écran via Python
         shell: powershell
         run: |
-          # Capturer tout l'écran et enregistrer sous forme de fichier PNG
-          boxcutter -f boxcutter-screenshot.png
+          python -c "
+          from PIL import ImageGrab
+          
+          # Capture l'intégralité de l'écran principal
+          screenshot = ImageGrab.grab()
+          
+          # Sauvegarde l'image au format PNG
+          screenshot.save('python-screenshot.png')
+          print('Capture d''écran générée avec succès !')
+          "
 
       - name: Télécharger la capture d'écran
         uses: actions/upload-artifact@v4
         with:
-          name: capture-boxcutter
-          path: boxcutter-screenshot.png
+          name: capture-python
+          path: python-screenshot.png
