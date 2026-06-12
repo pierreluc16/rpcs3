@@ -1,35 +1,45 @@
-name: Playwright Tests
+name: Capture Bureau Alternative (XFCE)
+
 on:
   push:
-    branches: [ main, master ]
-  pull_request:
-    branches: [ main, master ]
+    branches: [ main ]
+  workflow_dispatch:
+
 jobs:
-  test:
-    timeout-minutes: 60
+  xfce-capture:
     runs-on: ubuntu-latest
+
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - name: Récupérer le code du dépôt
+        uses: actions/checkout@v4
 
-    - name: Set up Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: lts/*
+      - name: Installer les outils graphiques et XFCE Screenshooter
+        run: |
+          sudo apt-get update
+          # xfce4-screenshooter est robuste et conçu spécifiquement pour le bureau Linux
+          sudo apt-get install -y xvfb xfce4-screenshooter fluxbox
 
-    - name: Install dependencies
-      run: npm ci
+      - name: Lancer le Bureau et Prendre la Photo
+        run: |
+          # 1. Initialiser le serveur d'affichage virtuel en Full HD
+          Xvfb :99 -screen 0 1920x1080x24 &
+          export DISPLAY=:99
+          sleep 2
 
-    - name: Install Playwright Browsers and System Dependencies
-      run: npx playwright install --with-deps
+          # 2. Lancer un gestionnaire de fenêtres léger (Fluxbox)
+          fluxbox &
+          sleep 1
 
-    - name: Run Playwright tests
-      run: npx playwright test
+          # 3. LANCEZ VOTRE APPLICATION DE BUREAU ICI
+          # Exemple : exécuter votre programme Linux en arrière-plan
+          # ./mon-application-desktop &
+          # sleep 3
 
-    - name: Upload Screenshots & Reports
-      uses: actions/upload-artifact@v4
-      if: ${{ !cancelled() }}
-      with:
-        name: playwright-report
-        path: playwright-report/
-        retention-days: 30
+          # 4. Prendre la capture d'écran de tout le bureau (--fullscreen)
+          xfce4-screenshooter --fullscreen --save desktop-alternative.png
+
+      - name: Télécharger la capture d'écran
+        uses: actions/upload-artifact@v4
+        with:
+          name: capture-bureau-xfce
+          path: desktop-alternative.png
