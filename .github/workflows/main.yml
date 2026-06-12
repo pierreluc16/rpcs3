@@ -1,53 +1,45 @@
-name: Windows 11 ARM64 Screenshot
+name: Capture Ubuntu Desktop Screenshot
 
 on:
   push:
     branches: [ main ]
-  workflow_dispatch:
+  workflow_dispatch: # Allows you to trigger manually from the GitHub UI
 
 jobs:
-  screenshot-arm64:
-    # Use the Windows ARM64 runner image (currently in public preview)
-    runs-on: windows-11-arm
+  take-screenshot:
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Run GUI App or Tests
+      - name: Install Display and Screenshot Tools
         run: |
-          echo "Launching your ARM64 application here..."
+          sudo apt-get update
+          # Xvfb provides the virtual screen, scrot captures it
+          sudo apt-get install -y xvfb scrot
 
-      - name: Capture Desktop Screenshot
-        shell: pwsh # Uses PowerShell Core which is fully optimized for ARM64
+      - name: Start Virtual Framebuffer and Run App
         run: |
-          # Load necessary .NET assemblies
-          Add-Type -AssemblyName System.Windows.Forms
-          Add-Type -AssemblyName System.Drawing
-
-          # Detect current ARM64 screen metrics
-          $screen = [System.Windows.Forms.Screen]::PrimaryScreen
-          $bounds = $screen.Bounds
-
-          # Initialize the graphic canvas
-          $bmp = New-Object System.Drawing.Bitmap($bounds.Width, $bounds.Height)
-          $graphics = [System.Drawing.Graphics]::FromImage($bmp)
-
-          # Copy the visual screen content
-          $graphics.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size)
-
-          # Save to repository workspace
-          $outputPath = "${{ github.workspace }}\arm64-screenshot.png"
-          $bmp.Save($outputPath, [System.Drawing.Imaging.ImageFormat]::Png)
-
-          # Free system memory
-          $graphics.Dispose()
-          $bmp.Dispose()
-          Write-Output "Screenshot saved successfully to $outputPath"
+          # 1. Start Xvfb on display port :99 with a common desktop resolution
+          Xvfb :99 -screen 0 1920x1080x24 &
+          
+          # 2. Export the DISPLAY variable so applications know where to draw
+          export DISPLAY=:99
+          
+          # 3. (Optional) Give Xvfb a moment to fully initialize
+          sleep 2
+          
+          # 4. Launch your application here in the background (Example: an app or browser)
+          # google-chrome --no-sandbox http://localhost:3000 & 
+          # sleep 5 # Give your app time to load
+          
+          # 5. Take the full desktop screenshot using scrot
+          mkdir -p output
+          scrot output/desktop-screenshot.png
 
       - name: Upload Screenshot Artifact
         uses: actions/upload-artifact@v4
-        if: always() # Captures the screen even if your tests fail
         with:
-          name: win11-arm64-desktop
-          path: arm64-screenshot.png
+          name: ubuntu-desktop-capture
+          path: output/desktop-screenshot.png
