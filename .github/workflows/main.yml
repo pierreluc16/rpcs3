@@ -1,24 +1,11 @@
 name: Test Firefly Repository
 
 on:
-  workflow_dispatch: # Allows you to run this manually from the GitHub UI
+  workflow_dispatch: # Allows you to trigger the test manually from the GitHub UI
 
 jobs:
-  # Test 1: The original failing environment (ARM64)
-  test-arm64:
-    name: Test on Ubuntu 22.04 ARM64
-    runs-on: ubuntu-22.04-arm
-
-    steps:
-      - name: Add Firefly repository
-        run: |
-          echo "deb [trusted=yes] http://wiki.t-firefly.com/firefly-ubuntu-repo jammy main" | sudo tee /etc/apt/sources.list.d/firefly.list
-          sudo apt-get update
-
-  # Test 2: The baseline environment (Standard x64)
-  test-x64:
-    name: Test on Ubuntu 22.04 x64
-    runs-on: ubuntu-22.04
+  run-repository-test:
+    runs-on: ubuntu-22.04-arm # Targets the specific ARM64 host image from issue #14067
 
     steps:
       - name: Add Firefly repository
