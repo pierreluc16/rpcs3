@@ -1,57 +1,24 @@
-name: Capture Windows 11 ARM (Alternative Node.js)
+# .github/workflows/ci-pipeline.yml
+name: NodeJS CI Pipeline
 
+# Trigger the workflow on pushes or pull requests to the main branch
 on:
   push:
     branches: [ main ]
-  workflow_dispatch:
+  pull_request:
+    branches: [ main ]
 
 jobs:
-  screenshot-node:
+  test-and-build:
+    # Specify the virtual environment runner
     runs-on: windows-11-arm
 
     steps:
-      - name: Récupérer le code du dépôt
-        uses: actions/checkout@v4
-
-      - name: Configurer Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Installer la bibliothèque de capture d'écran
-        shell: powershell
-        run: |
-          npm install screenshot-desktop
-
-      - name: Lancer votre application de bureau
-        shell: powershell
-        run: |
-          # LANCEZ VOTRE APPLICATION ICI
-          # Exemple : Lancer l'Éditeur de registre Windows
-          Start-Process regedit.exe
-          Start-Sleep -Seconds 3
-
-      - name: Prendre la capture d'écran via Node.js
-        shell: powershell
-        run: |
-          # Création et exécution du script Node.js à la volée
-          @"
-          const screenshot = require('screenshot-desktop');
-          const fs = require('fs');
-
-          screenshot({ format: 'png' }).then((img) => {
-              fs.writeFileSync('node-screenshot.png', img);
-              console.log('Capture d\'écran Node.js générée avec succès !');
-          }).catch((err) => {
-              console.error('Erreur lors de la capture :', err);
-              process.exit(1);
-          });
-          "@ | Out-File -FilePath capture.js -Encoding utf8
-
-          node capture.js
-
-      - name: Télécharger la capture d'écran
-        uses: actions/upload-artifact@v4
-        with:
-          name: capture-node
-          path: node-screenshot.png
+      - name: Check System Architecture
+  shell: bash
+  run: |
+    echo "Python platform.machine(): $(python -c 'import platform; print(platform.machine())')"
+    echo "Python platform.architecture(): $(python -c 'import platform; print(platform.architecture())')"
+    echo "Python platform.processor(): $(python -c 'import platform; print(platform.processor())')"
+    echo "PowerShell \$env:PROCESSOR_ARCHITECTURE: $PROCESSOR_ARCHITECTURE"
+    echo "PowerShell \$env:PROCESSOR_IDENTIFIER: $PROCESSOR_IDENTIFIER"
