@@ -1,14 +1,46 @@
-name: Test Firefly Repository
+name: Verify Issue 14069 (Windows 11 ARM GUI Focus)
 
 on:
-  workflow_dispatch: # Allows you to trigger the test manually from the GitHub UI
+  workflow_dispatch: # Allows you to trigger this manually from the GitHub UI
 
 jobs:
-  run-repository-test:
-    runs-on: ubuntu-22.04-arm # Targets the specific ARM64 host image from issue #14067
+  check-gui-focus:
+    # Explicitly target the Windows 11 ARM64 runner image
+    runs-on: windows-11-arm
 
     steps:
-      - name: Add Firefly repository
+      - name: Environment Diagnostics
         run: |
-          echo "deb [trusted=yes] http://wiki.t-firefly.com/firefly-ubuntu-repo jammy main" | sudo tee /etc/apt/sources.list.d/firefly.list
-          sudo apt-get update
+          Write-Host "=== System Architecture ==="
+          $env:PROCESSOR_ARCHITECTURE
+          Write-Host "=== Operating System ==="
+          [System.Environment]::OSVersion.Version
+
+      - name: Check Active Foreground Window Title
+        shell: powershell
+        run: |
+          # PowerShell snippet to pull the currently focused window title
+          $code = @'
+          [DllImport("user32.dll")]
+          public static extern IntPtr GetForegroundWindow();
+          [DllImport("user32.dll")]
+          public static extern int GetWindowText(IntPtr hWnd, System.Text.StringBuilder text, int count);
+          '@
+          $API = Add-Type -MemberDefinition $code -Name "Win32GetActiveWindow" -Namespace "Win32" -PassThru
+          
+          # Give the desktop environment a few seconds to fully initialize
+          Start-Sleep -Seconds 5
+          
+          $handle = $API::GetForegroundWindow()
+          $title = New-Object System.Text.StringBuilder 256
+          $API::GetWindowText($handle, $title, 256) | Out-Null
+          
+          Write-Host "The current active window title is: '$($title.ToString())'"
+          
+          # Evaluate if the first-run experience screen is stealing focus
+          if ($title.ToString() -match "Privacy" -or $title.ToString() -match "Experience") {
+             Write-Error "Verification Failed: The first-run privacy screen is taking focus! Issue #14069 is STILL OCCURRING."
+             exit 1
+          } else {
+             Write-Host "Success: No blocking privacy settings window detected in focus."
+          }
