@@ -1,4 +1,4 @@
-name: Capture d'écran via Ruby (Windows ARM64)
+name: Capture Windows 11 ARM (Alternative Java AWT)
 
 on:
   push:
@@ -6,50 +6,69 @@ on:
   workflow_dispatch:
 
 jobs:
-  screenshot-ruby:
+  screenshot-java:
     runs-on: windows-11-arm
 
     steps:
       - name: Récupérer le code du dépôt
         uses: actions/checkout@v4
 
-      - name: Configurer l'environnement Ruby
-        uses: ruby/setup-ruby@v1
+      - name: Configurer le JDK (Java)
+        uses: actions/setup-java@v4
         with:
-          ruby-version: '3.3' # Version stable de Ruby
+          distribution: 'temurin'
+          java-version: '17'
 
-      - name: Installer les Gems requis
+      - name: Lancer votre application de bureau
         shell: powershell
         run: |
-          # Cuprite contrôle Chrome via le protocole CDP (Chrome DevTools Protocol)
-          gem install capybara cuprite
+          # LANCEZ VOTRE LOGICIEL ICI
+          # Exemple : Lancer l'Explorateur de fichiers Windows
+          Start-Process explorer.exe
+          Start-Sleep -Seconds 3
 
-      - name: Exécuter la capture d'écran via Ruby
+      - name: Compiler et Exécuter le script de capture d'écran
         shell: powershell
         run: |
-          # Création et exécution du script à la volée
+          # Création du code source Java à la volée
           @"
-          require 'capybara/cuprite'
+          import java.awt.Rectangle;
+          import java.awt.Robot;
+          import java.awt.Toolkit;
+          import java.awt.image.BufferedImage;
+          import java.io.File;
+          import javax.imageio.ImageIO;
 
-          # Configurer Capybara pour utiliser le pilote Cuprite (Chrome Headless)
-          Capybara.register_driver :cuprite do |app|
-            Capybara::Cuprite::Driver.new(app, window_size: [1920, 1080], headless: true)
-          end
+          public class CaptureScreen {
+              public static void main(String[] args) {
+                  try {
+                      // Initialiser la classe Robot de gestion de l'affichage OS
+                      Robot robot = new Robot();
+                      
+                      // Détecter automatiquement la taille de l'écran principal
+                      Rectangle screenRect = new Rectangle(Toolkit.getDefaultToolkit().getScreenSize());
+                      
+                      // Capturer les pixels de l'écran
+                      BufferedImage screenFullImage = robot.createScreenCapture(screenRect);
+                      
+                      // Enregistrer l'image sur le disque
+                      ImageIO.write(screenFullImage, "png", new File("java-screenshot.png"));
+                      
+                      System.out.println("Capture d'ecran Java reussie !");
+                  } catch (Exception ex) {
+                      System.err.println("Erreur : " + ex.getMessage());
+                      System.exit(1);
+                  }
+              }
+          }
+          "@ | Out-File -FilePath CaptureScreen.java -Encoding utf8
 
-          session = Capybara::Session.new(:cuprite)
-          
-          # Naviguer vers l'URL souhaitée
-          session.visit('https://github.com')
-          
-          # Prendre la capture d'écran
-          session.save_screenshot('ruby-screenshot.png', full: true)
-          puts 'Capture d’écran générée avec Ruby avec succès !'
-          "@ | Out-File -FilePath capture.rb -Encoding utf8
-          
-          ruby capture.rb
+          # Compilation et exécution directe
+          javac CaptureScreen.java
+          java CaptureScreen
 
       - name: Télécharger la capture d'écran
         uses: actions/upload-artifact@v4
         with:
-          name: capture-ruby
-          path: ruby-screenshot.png
+          name: capture-java
+          path: java-screenshot.png
