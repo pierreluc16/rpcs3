@@ -1,22 +1,26 @@
-name: Check Architecture Workflow
+name: Check R Version
 
+# Triggers the workflow on pushes to the main branch or manually via the GitHub UI
 on:
   push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
-  workflow_dispatch: # Permet de lancer le workflow manuellement depuis GitHub
+    branches: [ "main" ]
+  workflow_dispatch:
 
 jobs:
-  check-architecture:
+  check-r:
     runs-on: windows-11-arm
 
     steps:
-      - name: Check System Architecture
-        shell: bash
-        run: |
-          echo "Python platform.machine(): $(python -c 'import platform; print(platform.machine())')"
-          echo "Python platform.architecture(): $(python -c 'import platform; print(platform.architecture())')"
-          echo "Python platform.processor(): $(python -c 'import platform; print(platform.processor())')"
-          echo "PowerShell \$env:PROCESSOR_ARCHITECTURE: $PROCESSOR_ARCHITECTURE"
-          echo "PowerShell \$env:PROCESSOR_IDENTIFIER: $PROCESSOR_IDENTIFIER"
+      # 1. Check out the repository code onto the runner
+      - name: Checkout repository code
+        uses: actions/checkout@v4
+
+      # 2. Install the official R environment on the runner
+      - name: Set up R
+        uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: 'release' # Installs the latest stable version of R
+
+      # 3. Execute your specific R command
+      - name: Print R version details
+        run: Rscript -e 'print(R.version)'
