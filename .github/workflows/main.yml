@@ -11,29 +11,17 @@ jobs:
   check-architecture:
     runs-on: windows-11-arm
     steps:
-      - name: Install PowerShell 7.4 (ARM64)
+      - name: Detect System Architecture
+        id: detect-arch
         shell: powershell
         run: |
-          $Url = "https://github.com"
-          $Dest = "$env:TEMP\PowerShell-7.4.0-win-arm64.msi"
+          # Détection native de l'architecture sous Windows
+          $Arch = $env:PROCESSOR_ARCHITECTURE.ToLower()
           
-          Write-Host "Téléchargement de PowerShell 7.4 ARM64..."
-          Invoke-WebRequest -Uri $Url -OutFile $Dest
-          
-          Write-Host "Installation silencieuse..."
-          Start-Process msiexec.exe -ArgumentList "/i `"$Dest`" /quiet /norestart" -Wait
-          
-          # Ajoute le chemin de la nouvelle version au PATH du workflow
-          $NewPath = "C:\Program Files\PowerShell\7"
-          echo "$NewPath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-
-      - name: Check System Architecture
-        shell: pwsh
-        run: |
-          Write-Host "PowerShell Version: $($PSVersionTable.PSVersion)"
-          Write-Host "Python platform.machine(): $(python -c 'import platform; print(platform.machine())')"
-          Write-Host "Python platform.architecture(): $(python -c 'import platform; print(platform.architecture())')"
-          Write-Host "Python platform.processor(): $(python -c 'import platform; print(platform.processor())')"
-          Write-Host "PowerShell `$env:PROCESSOR_ARCHITECTURE: $env:PROCESSOR_ARCHITECTURE"
-          Write-Host "PowerShell `$env:PROCESSOR_IDENTIFIER: $env:PROCESSOR_IDENTIFIER"
-          Write-Host "Windows Architecture (CIM): $((Get-CimInstance Win32_Processor).Architecture)"
+          if ($Arch -eq "arm64") {
+              Write-Host "Architecture détectée : ARM64"
+              echo "ARCH=arm64" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          } else {
+              Write-Host "Architecture détectée : X64 / Autre ($Arch)"
+              echo "ARCH=x64" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          }
