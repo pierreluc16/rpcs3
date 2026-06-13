@@ -11,10 +11,21 @@ jobs:
   check-architecture:
     runs-on: windows-11-arm
     steps:
-      - name: Install PowerShell 7.6
-        uses: microsoft/setup-powershell@v1
-        with:
-          version: '7.6'
+      - name: Install PowerShell 7.6 (ARM64)
+        shell: powershell
+        run: |
+          $Url = "https://github.com"
+          $Dest = "$env:TEMP\PowerShell-7.6.0-win-arm64.msi"
+          
+          Write-Host "Téléchargement de PowerShell 7.6 ARM64..."
+          Invoke-WebRequest -Uri $Url -OutFile $Dest
+          
+          Write-Host "Installation silencieuse..."
+          Start-Process msiexec.exe -ArgumentList "/i `"$Dest`" /quiet /norestart" -Wait
+          
+          # Ajoute le chemin de la nouvelle version au PATH du workflow
+          $NewPath = "C:\Program Files\PowerShell\7"
+          echo "$NewPath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Check System Architecture
         shell: pwsh
