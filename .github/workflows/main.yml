@@ -11,13 +11,13 @@ jobs:
   check-architecture:
     runs-on: windows-11-arm
     steps:
-      - name: Install PowerShell 7.6 (ARM64)
+      - name: Install PowerShell 7.4 (ARM64)
         shell: powershell
         run: |
           $Url = "https://github.com"
-          $Dest = "$env:TEMP\PowerShell-7.6.0-win-arm64.msi"
+          $Dest = "$env:TEMP\PowerShell-7.4.0-win-arm64.msi"
           
-          Write-Host "Téléchargement de PowerShell 7.6 ARM64..."
+          Write-Host "Téléchargement de PowerShell 7.4 ARM64..."
           Invoke-WebRequest -Uri $Url -OutFile $Dest
           
           Write-Host "Installation silencieuse..."
