@@ -1,27 +1,40 @@
-name: Check Architecture Workflow
+name: Detect PowerShell Architecture
 
-on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
-  workflow_dispatch: # Permet de lancer le workflow manuellement depuis GitHub
+on: [push, workflow_dispatch]
 
 jobs:
-  check-architecture:
-    runs-on: windows-11-arm
+  detect-arch:
+    strategy:
+      matrix:
+        os: [windows-11-arm]
+    runs-on: ${{ matrix.os }}
+
     steps:
-      - name: Detect System Architecture
-        id: detect-arch
-        shell: powershell
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Run Architecture Detection Script
+        shell: pwsh
         run: |
-          # Détection native de l'architecture sous Windows
-          $Arch = $env:PROCESSOR_ARCHITECTURE.ToLower()
+          # 1. Détecter l'architecture de l'OS sous-jacent
+          $OSArch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture
           
-          if ($Arch -eq "arm64") {
-              Write-Host "Architecture détectée : ARM64"
-              echo "ARCH=arm64" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-          } else {
-              Write-Host "Architecture détectée : X64 / Autre ($Arch)"
-              echo "ARCH=x64" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-          }
+          # 2. Détecter l'architecture du processus PowerShell actif
+          $ProcessArch = [System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture
+          
+          # 3. Détecter l'édition et la version de PowerShell
+          $PSEdition = $PSEdition
+          $PSVersion = $PSVersionTable.PSVersion
+
+          # Affichage des résultats dans la console GitHub Actions
+          Write-Host "=========================================="
+          Write-Host "Système d'exploitation : ${{ matrix.os }}"
+          Write-Host "Architecture de l'OS    : $OSArch"
+          Write-Host "Architecture du Process : $ProcessArch"
+          Write-Host "Édition de PowerShell  : $PSEdition"
+          Write-Host "Version de PowerShell   : $PSVersion"
+          Write-Host "=========================================="
+
+          # Optionnel : Sauvegarder les valeurs dans les variables d'environnement de l'étape
+          echo "OS_ARCH=$OSArch" >> $env:GITHUB_ENV
+          echo "PROC_ARCH=$ProcessArch" >> $env:GITHUB_ENV
