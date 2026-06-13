@@ -21,18 +21,12 @@ jobs:
         with:
           Version: latest # Automatically fetches the newest version (e.g., 7.6.x)
 
-      - name: Verify System Architecture
-        shell: pwsh 
+          steps:
+      - name: Check System Architecture
+        shell: bash
         run: |
-          Write-Host "=== POWERSHELL RUNTIME VERSION ==="
-          Write-Host "PowerShell Engine Version: $($PSVersionTable.PSVersion)"
-        
-          Write-Host "`n=== PYTHON RUNTIME ARCHITECTURE ==="
-          python -c "import platform; print(f'Python platform.machine():      {platform.machine()}')"
-          python -c "import platform; print(f'Python platform.architecture(): {platform.architecture()}')"
-          python -c "import platform; print(f'Python platform.processor():    {platform.processor()}')"
-          
-          Write-Host "`n=== WINDOWS ENVIRONMENT ARCHITECTURE ==="
-          Write-Host "PowerShell `$env:PROCESSOR_ARCHITECTURE: $($env:PROCESSOR_ARCHITECTURE)"
-          Write-Host "PowerShell `$env:PROCESSOR_IDENTIFIER:   $($env:PROCESSOR_IDENTIFIER)"
-          Write-Host "PowerShell `$PSVersionTable.OS:          $($PSVersionTable.OS)"
+          echo "Python platform.machine(): $(python -c 'import platform; print(platform.machine())')"
+          echo "Python platform.architecture(): $(python -c 'import platform; print(platform.architecture())')"
+          echo "Python platform.processor(): $(python -c 'import platform; print(platform.processor())')"
+          echo "PowerShell \$env:PROCESSOR_ARCHITECTURE: $PROCESSOR_ARCHITECTURE"
+          echo "PowerShell \$env:PROCESSOR_IDENTIFIER: $PROCESSOR_IDENTIFIER"
