@@ -1,40 +1,36 @@
-name: Detect PowerShell Architecture
+name: Test Windows 11 ARM
 
 on: [push, workflow_dispatch]
 
 jobs:
-  detect-arch:
-    strategy:
-      matrix:
-        os: [windows-11-arm]
-    runs-on: ${{ matrix.os }}
+  check-arm-architecture:
+    # On force l'exécution sur une vraie machine virtuelle Windows 11 ARM64 de GitHub
+    runs-on: windows-11-arm
 
     steps:
-      - name: Check out repository
+      - name: Check out code
         uses: actions/checkout@v4
 
-      - name: Run Architecture Detection Script
+      - name: Detect Native ARM Environment
         shell: pwsh
         run: |
-          # 1. Détecter l'architecture de l'OS sous-jacent
-          $OSArch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture
+          # 1. Vérification de l'architecture de la machine hôte
+          $OSArch = $env:PROCESSOR_ARCHITECTURE
           
-          # 2. Détecter l'architecture du processus PowerShell actif
+          # 2. Vérification de la version de Windows
+          $OSVersion = (Get-CimInstance Win32_OperatingSystem).Caption
+
+          # 3. Vérification de l'architecture du binaire PowerShell (pwsh) en cours d'exécution
           $ProcessArch = [System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture
-          
-          # 3. Détecter l'édition et la version de PowerShell
-          $PSEdition = $PSEdition
-          $PSVersion = $PSVersionTable.PSVersion
 
-          # Affichage des résultats dans la console GitHub Actions
           Write-Host "=========================================="
-          Write-Host "Système d'exploitation : ${{ matrix.os }}"
-          Write-Host "Architecture de l'OS    : $OSArch"
+          Write-Host "Système d'exploitation : $OSVersion"
+          Write-Host "Architecture de l'Hôte : $OSArch"
           Write-Host "Architecture du Process : $ProcessArch"
-          Write-Host "Édition de PowerShell  : $PSEdition"
-          Write-Host "Version de PowerShell   : $PSVersion"
           Write-Host "=========================================="
 
-          # Optionnel : Sauvegarder les valeurs dans les variables d'environnement de l'étape
-          echo "OS_ARCH=$OSArch" >> $env:GITHUB_ENV
-          echo "PROC_ARCH=$ProcessArch" >> $env:GITHUB_ENV
+          # Le script échouera proprement si nous ne sommes pas sur du ARM64
+          if ($OSArch -ne "ARM64") {
+              Write-Error "Échec : Ce runner n'est pas configuré en ARM64 !"
+              exit 1
+          }
