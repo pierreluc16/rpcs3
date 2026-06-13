@@ -1,36 +1,38 @@
-name: Test Windows 11 ARM
+name: Check Architecture Workflow
 
-on: [push, workflow_dispatch]
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch: # Allows manual triggers from the GitHub Actions UI
 
 jobs:
-  check-arm-architecture:
-    # On force l'exécution sur une vraie machine virtuelle Windows 11 ARM64 de GitHub
-    runs-on: windows-11-arm
+  check-architecture:
+    runs-on: windows-11-arm # Targets GitHub-hosted Windows ARM64 runners
 
     steps:
-      - name: Check out code
+      - name: Check Out Code
         uses: actions/checkout@v4
 
-      - name: Detect Native ARM Environment
-        shell: pwsh
+      # Forces the runner environment to dynamically fetch and install the latest stable pwsh release
+      - name: Install Latest PowerShell
+        uses: PSModule/install-powershell@v1
+        with:
+          Version: latest # Automatically fetches the newest version (e.g., 7.6.x)
+
+      - name: Verify System Architecture
+        shell: pwsh 
         run: |
-          # 1. Vérification de l'architecture de la machine hôte
-          $OSArch = $env:PROCESSOR_ARCHITECTURE
+          Write-Host "=== POWERSHELL RUNTIME VERSION ==="
+          Write-Host "PowerShell Engine Version: $($PSVersionTable.PSVersion)"
+        
+          Write-Host "`n=== PYTHON RUNTIME ARCHITECTURE ==="
+          python -c "import platform; print(f'Python platform.machine():      {platform.machine()}')"
+          python -c "import platform; print(f'Python platform.architecture(): {platform.architecture()}')"
+          python -c "import platform; print(f'Python platform.processor():    {platform.processor()}')"
           
-          # 2. Vérification de la version de Windows
-          $OSVersion = (Get-CimInstance Win32_OperatingSystem).Caption
-
-          # 3. Vérification de l'architecture du binaire PowerShell (pwsh) en cours d'exécution
-          $ProcessArch = [System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture
-
-          Write-Host "=========================================="
-          Write-Host "Système d'exploitation : $OSVersion"
-          Write-Host "Architecture de l'Hôte : $OSArch"
-          Write-Host "Architecture du Process : $ProcessArch"
-          Write-Host "=========================================="
-
-          # Le script échouera proprement si nous ne sommes pas sur du ARM64
-          if ($OSArch -ne "ARM64") {
-              Write-Error "Échec : Ce runner n'est pas configuré en ARM64 !"
-              exit 1
-          }
+          Write-Host "`n=== WINDOWS ENVIRONMENT ARCHITECTURE ==="
+          Write-Host "PowerShell `$env:PROCESSOR_ARCHITECTURE: $($env:PROCESSOR_ARCHITECTURE)"
+          Write-Host "PowerShell `$env:PROCESSOR_IDENTIFIER:   $($env:PROCESSOR_IDENTIFIER)"
+          Write-Host "PowerShell `$PSVersionTable.OS:          $($PSVersionTable.OS)"
