@@ -1,4 +1,4 @@
-name: Demonstrate Missing Libicu Failure
+name: Compiler ICU Failure Workflow
 
 on:
   push:
@@ -6,21 +6,23 @@ on:
   workflow_dispatch:
 
 jobs:
-  must-fail:
+  test-compile-fail:
     runs-on: ubuntu-latest
-    
-    # We use an alpine container to guarantee libicu-dev is missing completely
-    container:
-      image: alpine:latest
 
     steps:
-    - name: Install basic compiler tools
-      run: apk add --no-cache gcc musl-dev pkgconfig
-
-    - name: Attempt compilation check (This step will FAIL)
+    - name: Try compiling against ICU (This step will FAIL)
       run: |
-        echo "=== Trying to look up libicu development configuration ==="
-        
-        # pkg-config will return an error exit code (1) because icu-i18n is missing.
-        # This will immediately crash the GitHub Action job.
-        pkg-config --cflags --libs icu-i18n
+        echo "=== Creating a mock application that requires libicu-dev ==="
+        cat << 'EOF' > test.cpp
+        #include <unicode/utypes.h> // Core ICU header file
+        #include <iostream>
+
+        int main() {
+            std::cout << "ICU is working!" << std::endl;
+            return 0;
+        }
+        EOF
+
+        echo "=== Attempting compilation while isolating system includes ==="
+        # -nostdinc tells GCC to ignore the system's pre-installed header directories
+        g++ -nostdinc -I/usr/include/c++/13 -I/usr/include/x86_64-linux-gnu/c++/13 test.cpp -o test_app
