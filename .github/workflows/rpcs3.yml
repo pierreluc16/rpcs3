@@ -1,10 +1,13 @@
 name: Check Requirements
 
-on: [push, pull_request]
+on:
+  push:
+  pull_request:
+  workflow_dispatch: # Allows manual triggering from the Actions tab
 
 jobs:
   verify-dependencies:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
 
     steps:
       - name: Check if libicu-dev is installed
