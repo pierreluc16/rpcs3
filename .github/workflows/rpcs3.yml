@@ -1,19 +1,11 @@
-name: Check Requirements
+name: Check ICU Library
 
-on:
-  push:
-  pull_request:
-  workflow_dispatch: # Allows manual triggering from the Actions tab
+on: [push]
 
 jobs:
-  verify-dependencies:
-    runs-on: ubuntu-24.04
+  check-package:
+    runs-on: ubuntu-latest
 
     steps:
-      - name: Check if libicu-dev is installed
-        run: |
-          if ! dpkg -s libicu-dev >/dev/null 2>&1; then
-            echo "Error: libicu-dev is missing!"
-            exit 1
-          fi
-          echo "libicu-dev is installed."
+      - name: Run dpkg status check
+        run: dpkg -s libicu-dev
