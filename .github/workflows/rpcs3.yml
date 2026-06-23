@@ -1,4 +1,4 @@
-name: Pure Windows Desktop Screenshot
+name: Windows Desktop Screenshot
 
 on:
   push:
