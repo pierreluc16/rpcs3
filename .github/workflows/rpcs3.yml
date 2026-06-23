@@ -1,4 +1,4 @@
-name: Windows 11 ARM OOBE Threat Detection
+name: Check Windows 11 ARM OOBE Status
 
 on:
   push:
@@ -6,62 +6,45 @@ on:
   workflow_dispatch:
 
 jobs:
-  environment-scan:
-    # Target the Windows 11 ARM64 runner environment
+  oobe-validation:
+    # Runs on GitHub-hosted or self-hosted Windows 11 ARM64 environments
     runs-on: windows-11-arm
 
     steps:
-    - name: Scan Environment for Active OOBE Lock
+    - name: Run OOBE Blocker Check
       shell: powershell
       run: |
-        Write-Host "Initializing native API check for Windows Out-of-Box Experience (OOBE)..."
-        
-        # 1. Query the native Windows API via P/Invoke to determine if OOBE is active
-        $Signature = @'
-        [DllImport("OOBEApi.dll", CallingConvention = CallingConvention.StdCall)]
-        public static extern bool OOBEComplete(out bool isOOBEComplete);
-        '@
-        
-        $OobeApi = Add-Type -MemberDefinition $Signature -Name "OobeCheck" -Namespace "Win32" -PassThru
-        $IsComplete = $false
-        
-        try {
-            $Result = $OobeApi::OOBEComplete([ref]$IsComplete)
-            if ($Result -and -not $IsComplete) {
-                Write-Warning "Windows API indicates that OOBE is NOT complete on this host instance!"
-                $ApiTriggered = $true
-            } else {
-                Write-Host "Windows API check verified: OOBE phase marked as complete."
-                $ApiTriggered = $false
-            }
-        } catch {
-            Write-Host "Unable to poll OOBEApi.dll directly. Falling back to active threat signature parsing..."
-            $ApiTriggered = $false
+        Write-Host "Checking runner for unsuppressed Windows 11 OOBE/Privacy settings screens..."
+
+        # 1. Look for known Windows first-run provisioning processes
+        $OobeProcesses = Get-Process -Name "CloudExperienceHost*", "wwahost", "ConsentUx" -ErrorAction SilentlyContinue
+
+        # 2. Inspect active UI threads for OOBE/Privacy keywords taking window focus
+        $TargetWindows = Get-Process | Where-Object { 
+            $_.MainWindowTitle -match "Privacy" -or 
+            $_.MainWindowTitle -match "Experience" -or 
+            $_.MainWindowTitle -match "OOBE" 
         }
 
-        # 2. Check for active execution fingerprints of OOBE runtime layers
-        $TargetProcesses = Get-Process -Name "CloudExperienceHost*", "wwahost", "ConsentUx" -ErrorAction SilentlyContinue
-        $TargetWindows = Get-Process | Where-Object { $_.MainWindowTitle -match "Privacy" -or $_.MainWindowTitle -match "Experience" -or $_.MainWindowTitle -match "OOBE" }
+        # 3. Handle results and force a clean failure if caught
+        if ($OobeProcesses -or $TargetWindows) {
+            Write-Error "====================================================================="
+            Write-Error "DETECTION TRIGGERED: Windows 11 ARM OOBE or Privacy dialog detected."
+            Write-Error "Failing the job now to prevent the runner from hanging until timeout."
+            Write-Error "====================================================================="
 
-        # 3. Handle detection results and fail the workflow if detected
-        if ($ApiTriggered -or $TargetProcesses -or $TargetWindows) {
-            Write-Error "=========================================================================="
-            Write-Error "CRITICAL FAILURE: Windows 11 ARM OOBE / Privacy screen layer detected!"
-            Write-Error "This workflow step is exiting immediately to prevent pipeline hang timeouts."
-            Write-Error "=========================================================================="
-            
-            if ($TargetProcesses) {
-                Write-Host "Active blocking background processes found:"
-                $TargetProcesses | Select-Object Name, Id, Path | Format-Table -AutoSize
+            if ($OobeProcesses) {
+                Write-Host "Blocking Processes Found:"
+                $OobeProcesses | Select-Object Name, Id, Path | Format-Table -AutoSize
             }
-            
+
             if ($TargetWindows) {
-                Write-Host "Active blocking interactive window interfaces found:"
+                Write-Host "Blocking Active Window Titles Found:"
                 $TargetWindows | Select-Object Name, MainWindowTitle | Format-Table -AutoSize
             }
-            
-            # Terminate execution with a hard failure signature
+
+            # Terminate step immediately with exit code 1
             exit 1
         }
-        
-        Write-Host "SUCCESS: Environment scan complete. No active OOBE blocking threads detected."
+
+        Write-Host "SUCCESS: No OOBE or active privacy screen hooks detected. System is responsive."
