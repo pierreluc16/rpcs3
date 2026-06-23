@@ -16,7 +16,7 @@ jobs:
       - name: Checkout Repository Code
         uses: actions/checkout@v4
 
-      # Step 1: Execute the custom low-level Win32 API OOBE check (Syntax Fixed)
+      # Step 1: Query the Win32 API natively (Using fixed dot notation syntax)
       - name: Execute Native Win32 OOBE Detection Script
         id: win32_oobe_check
         continue-on-error: true
@@ -24,7 +24,7 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           
-          # Define the C# signature to access kernel32.dll natively
+          # Declare the C# signature to interface with kernel32.dll
           $TypeDef = @"
           using System;
           using System.Runtime.InteropServices;
@@ -36,35 +36,36 @@ jobs:
           }
           "@
 
-          Write-Host "Compiling Win32 C# type definition..."
+          Write-Host "Compiling custom Win32 interop type..."
           Add-Type -TypeDefinition $TypeDef -Language CSharp
 
           $IsOOBEComplete = 0
-          Write-Host "Querying system OOBE state via Kernel32 API..."
+          Write-Host "Invoking OOBEComplete from Kernel32.dll..."
           
-          # FIXED SYNTAX: Resolves the 'Missing ]' ParseException
+          # Dot notation syntax prevents PowerShell from throwing ParseExceptions
           $Result = [Win32API.OobeCheck]::OOBEComplete([ref]$IsOOBEComplete)
 
-          # Evaluate API flag response
+          # Process evaluation flags
           if ($IsOOBEComplete -eq 0) {
-              Write-Host "[DETECTED] Windows is currently inside the OOBE phase."
+              Write-Host "[DETECTED] Windows is actively inside the OOBE stage."
               exit 0
           } else {
-              Write-Host "[NOT DETECTED] OOBE is already complete. System is at standard desktop."
+              Write-Host "[NOT DETECTED] OOBE is complete. System is running at desktop."
               exit 1
           }
 
-      # Step 2: Evaluate the outcome and trigger a critical failure if stuck
-      - name: Process OOBE Detection Telemetry
+      # Step 2: This step ONLY executes if Step 1 detected that the system is trapped (Outcome = success)
+      - name: Trigger OOBE Critical Failure Annotation
+        if: steps.win32_oobe_check.outcome == 'success'
         shell: powershell
         run: |
-          # Evaluate the boolean status of the preceding Win32 step
-          $IsOobeTrapped = ("${{ steps.win32_oobe_check.outcome }}" -eq "success")
+          Write-Output "::error::[CRITICAL FAILURE] OOBE state validation failed. The Windows 11 ARM system remains trapped in the deployment wizard."
+          exit 1
 
-          if ($IsOobeTrapped) {
-              Write-Output "::error::[CRITICAL FAILURE] OOBE state validation failed. The Windows 11 ARM system did not reach the desktop."
-              exit 1
-          }
-
-          Write-Output "[OOBE VALIDATED] Clean deployment confirmed. The system is ready."
+      # Step 3: This step ONLY executes if Step 1 confirmed OOBE is complete (Outcome = failure)
+      - name: Log Successful OOBE Bypass
+        if: steps.win32_oobe_check.outcome == 'failure'
+        shell: powershell
+        run: |
+          Write-Output "[OOBE VALIDATED] Target platform has bypassed OOBE successfully. The desktop environment is ready."
           exit 0
