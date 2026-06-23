@@ -1,4 +1,4 @@
-name: Windows 11 ARM LLVM Full Architecture Audit
+name: Windows 11 ARM LLVM Native Percentage Audit
 
 on:
   push:
@@ -8,86 +8,102 @@ on:
   workflow_dispatch:
 
 jobs:
-  audit-llvm:
-    runs-on: windows-11-vs2026-arm
+  calculate-native-ratio:
+    runs-on: windows-11-arm
     
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Deep Scan LLVM Installation
+    - name: Scan LLVM Folder Composition
       shell: pwsh
       run: |
         $llvmPath = "C:\Program Files\LLVM"
         
         if (-not (Test-Path $llvmPath)) {
-            Write-Error "LLVM directory not found at $llvmPath"
+            Write-Error "LLVM installation directory was not found at: $llvmPath"
             exit 1
         }
         
-        Write-Host "🔍 Starting a deep 100% ARM64 audit on: $llvmPath"
-        
-        # Gather all executable and library files inside the folder recursively
+        Write-Host "🔍 Deep scanning directory mapping to analyze binary composition..."
         $files = Get-ChildItem -Path $llvmPath -Recurse -Include *.exe, *.dll
         
-        $nonArm64Binaries = @()
-        $totalChecked = 0
+        $arm64Count = 0
+        $emulatedCount = 0
+        $failedReads = 0
+        $emulatedList = @()
 
         foreach ($file in $files) {
-            $totalChecked++
             try {
-                # Open binary stream to parse PE headers safely
                 $stream = New-Object System.IO.FileStream($file.FullName, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::Read)
                 $reader = New-Object System.IO.BinaryReader($stream)
                 
-                # Verify DOS Magic Number (MZ)
+                # Check DOS signature
                 $mz = $reader.ReadBytes(2)
                 if ($mz[0] -ne 0x4D -or $mz[1] -ne 0x5A) {
-                    $reader.Close(); $stream.Close(); continue # Skip if not a valid PE file
+                    $reader.Close(); $stream.Close(); continue
                 }
                 
-                # Seek to PE header offset
+                # Extract PE structure header locations
                 $stream.Seek(0x3C, [System.IO.SeekOrigin]::Begin)
                 $peOffset = $reader.ReadUInt32()
-                
-                # Seek to COFF Machine Type field (PE signature + 4 bytes)
                 $stream.Seek(($peOffset + 4), [System.IO.SeekOrigin]::Begin)
                 $machineType = $reader.ReadUInt16()
                 
                 $reader.Close()
                 $stream.Close()
                 
-                # 0xAA64 = IMAGE_FILE_MACHINE_ARM64
-                if ($machineType -ne 0xAA64) {
-                    # Determine architectural identity for reporting
-                    $archStr = switch ($machineType) {
-                        0x8664 { "x86_64 (AMD64)" }
-                        0x014c { "x86 (32-bit)" }
-                        0x01c4 { "ARM (32-bit)" }
-                        default { "Unknown (0x{0:X4})" -f $machineType }
+                # 0xAA64 = Native ARM64 Machine ID
+                if ($machineType -eq 0xAA64) {
+                    $arm64Count++
+                } else {
+                    $emulatedCount++
+                    $archLabel = switch($machineType) {
+                        0x8664 { "x86_64 (64-bit Intel Emulated)" }
+                        0x014c { "x86 (32-bit Intel Emulated)" }
+                        default { "Unknown Arch (0x{0:X4})" -f $machineType }
                     }
-                    
-                    Write-Host "❌ NON-ARM64 FOUND: $($file.FullName) -> Target: $archStr"
-                    $nonArm64Binaries += [PSCustomObject]@{
-                        Path = $file.FullName
-                        Arch = $archStr
+                    $emulatedList += [PSCustomObject]@{
+                        FileName = $file.Name
+                        FilePath = $file.FullName
+                        Architecture = $archLabel
                     }
                 }
             }
             catch {
-                Write-Host "⚠️ Warning: Could not read $($file.FullName) - $_"
+                $failedReads++
             }
         }
 
-        Write-Host "`n📊 Scan Summary:"
-        Write-Host "Total files checked: $totalChecked"
-        
-        if ($nonArm64Binaries.Count -gt 0) {
-            Write-Host "❌ FAILED: The LLVM installation is NOT 100% ARM64 native. Found $($nonArm64Binaries.Count) non-ARM64 files."
-            # Set environment variable flag for subsequent steps if needed
-            Add-Content -Path $env:GITHUB_ENV -Value "LLVM_IS_PURE_ARM64=false"
+        $totalChecked = $arm64Count + $emulatedCount
+        if ($totalChecked -eq 0) {
+            Write-Error "No valid executable or library binaries were found to audit."
+            exit 1
+        }
+
+        # Calculate exact native ratio
+        $nativePercentage = [Math]::Round(($arm64Count / $totalChecked) * 100, 2)
+
+        Write-Host "`n========================================="
+        Write-Host "📊 LLVM NATIVE COMPOSITION REPORT"
+        Write-Host "========================================="
+        Write-Host "• Native ARM64 Binaries : $arm64Count"
+        Write-Host "• Emulated Binaries     : $emulatedCount"
+        Write-Host "• Unreadable System Files: $failedReads"
+        Write-Host "• TOTAL VALID BINARIES   : $totalChecked"
+        Write-Host "-----------------------------------------"
+        Write-Host "➔ THIS LLVM INSTALLATION IS $nativePercentage% NATIVE ARM64"
+        Write-Host "=========================================`n"
+
+        if ($emulatedCount -gt 0) {
+            Write-Host "⚠️ Breakdown of Emulated/Non-ARM64 Components Found:"
+            $emulatedList | Format-Table -AutoSize
+        }
+
+        # Handle passing/failing criteria based on "mostly" rule (e.g. > 90% Native)
+        if ($nativePercentage -lt 90.00) {
+            Write-Host "❌ CRITICAL: Installation is NOT mostly native ($nativePercentage% < 90%). Tainted toolchain performance risks detected."
             exit 1
         } else {
-            Write-Host "✅ SUCCESS: The LLVM installation is 100% ARM64 native!"
-            Add-Content -Path $env:GITHUB_ENV -Value "LLVM_IS_PURE_ARM64=true"
+            Write-Host "✅ SUCCESS: LLVM installation is verified as mostly native ARM64!"
         }
