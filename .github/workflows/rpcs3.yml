@@ -16,7 +16,7 @@ jobs:
       - name: Checkout Repository Code
         uses: actions/checkout@v4
 
-      # Step 1: Execute the custom low-level Win32 API OOBE check
+      # Step 1: Execute the custom low-level Win32 API OOBE check (Syntax Fixed)
       - name: Execute Native Win32 OOBE Detection Script
         id: win32_oobe_check
         continue-on-error: true
@@ -41,7 +41,9 @@ jobs:
 
           $IsOOBEComplete = 0
           Write-Host "Querying system OOBE state via Kernel32 API..."
-          $Result = [Win32API::OobeCheck]::OOBEComplete([ref]$IsOOBEComplete)
+          
+          # FIXED SYNTAX: Changed from [Win32API::OobeCheck]::OOBEComplete to [Win32API.OobeCheck]::OOBEComplete
+          $Result = [Win32API.OobeCheck]::OOBEComplete([ref]$IsOOBEComplete)
 
           # Evaluate API flag response
           if ($IsOOBEComplete -eq 0) {
