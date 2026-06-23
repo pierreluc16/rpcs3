@@ -1,20 +1,20 @@
-name: Strict OOBE Validation
+name: Fast OOBE Check
 
 on: [push, workflow_dispatch]
 
 jobs:
-  validate:
+  check-system:
     runs-on: windows-11-arm
     steps:
-    - name: Scan and Fail on Blocker
+    - name: Run Blocker Audit
       shell: powershell
       run: |
-        $blockers = Get-Process | Where-Object { 
+        $blocker = Get-Process | Where-Object { 
           $_.Name -match 'CloudExperienceHost|wwahost|ConsentUx' -or 
           $_.MainWindowTitle -match 'Privacy|Experience|OOBE' 
         }
-        if ($blockers) {
-          [System.Console]::Error.WriteLine("::error title=CRITICAL SYSTEM BLOCKER DETECTED::Windows 11 OOBE/Privacy dialog is currently freezing the UI automation context.")
+        if ($blocker) {
+          echo "::error title=CRITICAL ERROR::Windows 11 OOBE/Privacy dialog detected! Failing job immediately to prevent runner hang."
           exit 1
         }
-        Write-Host "No blocking interfaces found."
+        echo "Runner state clear."
