@@ -1,4 +1,4 @@
-name: Windows 11 ARM64 LLVM Detection
+name: Windows 11 ARM LLVM Detection
 
 on:
   push:
@@ -9,7 +9,7 @@ on:
 
 jobs:
   check-llvm-architecture:
-    # Target GitHub's official Windows 11 ARM64 runner
+    # Target GitHub's official Windows 11 ARM hosted runner
     runs-on: windows-11-arm
     
     steps:
@@ -22,7 +22,7 @@ jobs:
       run: |
         # Locate clang.exe via PATH or fallback to the standard installation path
         $clangPath = Get-Command clang.exe -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source
-        if (-not $clangPath) { $clangPath = "C:\\Program Files\\LLVM\\bin\\clang.exe" }
+        if (-not $clangPath) { $clangPath = "C:\Program Files\LLVM\bin\clang.exe" }
         
         if (-not (Test-Path $clangPath)) {
             Write-Error "LLVM/Clang was not found at path: $clangPath"
