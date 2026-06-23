@@ -8,7 +8,7 @@ on:
 jobs:
   environment-scan:
     # Target the Windows 11 ARM64 runner environment
-    runs-on: windows-11-arm64
+    runs-on: windows-11-arm
 
     steps:
     - name: Scan Environment for Active OOBE Lock
