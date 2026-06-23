@@ -1,71 +1,31 @@
-name: Windows 11 ARM OOBE Win32 API Verification
+name: Check Windows 11 ARM OOBE Status
 
-on:
-  push:
-    branches: [ main, develop ]
-  pull_request:
-    branches: [ main ]
-  workflow_dispatch:
+on: [push, pull_request]
 
 jobs:
-  check-oobe-state:
-    name: Execute Low-Level OOBE API Check
-    runs-on: windows-11-arm
+  check-environment:
+    # Targets the GitHub-hosted Windows 11 ARM runner
+    runs-on: windows-11-arm 
 
     steps:
-      - name: Checkout Repository Code
-        uses: actions/checkout@v4
-
-      # Step 1: Query the Win32 API natively (Using fixed dot notation syntax)
-      - name: Execute Native Win32 OOBE Detection Script
-        id: win32_oobe_check
-        continue-on-error: true
+      - name: Detect OS Architecture and OOBE Block
+        id: check_oobe
         shell: powershell
         run: |
-          $ErrorActionPreference = "Stop"
-          
-          # Declare the C# signature to interface with kernel32.dll
-          $TypeDef = @"
-          using System;
-          using System.Runtime.InteropServices;
-          namespace Win32API {
-              public class OobeCheck {
-                  [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
-                  public static extern int OOBEComplete(ref int bIsOOBEComplete);
-              }
-          }
-          "@
+          # 1. Verify strict ARM64 architecture
+          $arch = $env:PROCESSOR_ARCHITECTURE
+          Write-Host "Detected Architecture: $arch"
 
-          Write-Host "Compiling custom Win32 interop type..."
-          Add-Type -TypeDefinition $TypeDef -Language CSharp
+          # 2. Query Windows Registry for Setup/OOBE status
+          # A value of 3 means Setup and OOBE are successfully completed.
+          $oobePath = "HKLM:\SYSTEM\Setup\Status\ChildCompletion"
+          $setupStatus = (Get-ItemProperty -Path $oobePath).Setup.exe
+          Write-Host "OOBE Setup Status Code: $setupStatus"
 
-          $IsOOBEComplete = 0
-          Write-Host "Invoking OOBEComplete from Kernel32.dll..."
-          
-          # Dot notation syntax prevents PowerShell from throwing ParseExceptions
-          $Result = [Win32API.OobeCheck]::OOBEComplete([ref]$IsOOBEComplete)
-
-          # Process evaluation flags
-          if ($IsOOBEComplete -eq 0) {
-              Write-Host "[DETECTED] Windows is actively inside the OOBE stage."
-              exit 0
-          } else {
-              Write-Host "[NOT DETECTED] OOBE is complete. System is running at desktop."
+          # 3. Trigger critical failure if it is ARM64 AND OOBE is not completed
+          if ("$arch" -eq "ARM64" -and "$setupStatus" -ne "3") {
+              Write-Error "CRITICAL FAILURE: Windows 11 ARM runner is locked in OOBE state!"
               exit 1
+          } else {
+              Write-Host "Environment is valid. Proceeding..."
           }
-
-      # Step 2: This step ONLY executes if Step 1 detected that the system is trapped (Outcome = success)
-      - name: Trigger OOBE Critical Failure Annotation
-        if: steps.win32_oobe_check.outcome == 'success'
-        shell: powershell
-        run: |
-          Write-Output "::error::[CRITICAL FAILURE] OOBE state validation failed. The Windows 11 ARM system remains trapped in the deployment wizard."
-          exit 1
-
-      # Step 3: This step ONLY executes if Step 1 confirmed OOBE is complete (Outcome = failure)
-      - name: Log Successful OOBE Bypass
-        if: steps.win32_oobe_check.outcome == 'failure'
-        shell: powershell
-        run: |
-          Write-Output "[OOBE VALIDATED] Target platform has bypassed OOBE successfully. The desktop environment is ready."
-          exit 0
