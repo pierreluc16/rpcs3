@@ -1,74 +1,39 @@
-name: Windows 11 ARM64 OOBE Enforcer
+name: Detect Windows 11 ARM OOBE Issues
 
 on:
   push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
-  workflow_dispatch: # Allows you to manually launch this workflow from the GitHub UI
+  workflow_dispatch:
 
 jobs:
-  validate-environment:
-    # Explicitly targeting native ARM64 runners
-    runs-on: windows-11-arm
+  check-oobe:
+    runs-on: windows-11-arm64
 
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+    - name: Scan for OOBE Blockers
+      shell: powershell
+      run: |
+        Write-Host "Scanning for active OOBE, CloudExperienceHost, or Privacy Consent windows..."
+        
+        # Check for known OOBE and welcome-screen background executables
+        $OobeProcesses = Get-Process -Name "CloudExperienceHost*", "wwahost", "ConsentUx" -ErrorAction SilentlyContinue
+        
+        # Search window titles for common OOBE / Privacy phrases
+        $TargetWindows = Get-Process | Where-Object { $_.MainWindowTitle -match "Privacy" -or $_.MainWindowTitle -match "Experience" -or $_.MainWindowTitle -match "OOBE" }
 
-      - name: Assert Non-OOBE Environment Status
-        shell: powershell
-        run: |
-          Write-Output "Initializing comprehensive OS setup checks..."
-          $OOBE_Identified = $false
-
-          # 1. Native API Kernel Evaluation
-          $TypeDef = @"
-          using System;
-          using System.Runtime.InteropServices;
-          namespace NativeWin32 {
-              public class SystemSetup {
-                  [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
-                  public static extern int OOBEComplete(ref int bIsOOBEComplete);
-              }
-          }
-          "@
-          try {
-              Add-Type -TypeDefinition $TypeDef -Language CSharp -ErrorAction SilentlyContinue
-              $IsCompleteVal = 0
-              $ApiResult = [NativeWin32.SystemSetup]::OOBEComplete([ref]$IsCompleteVal)
-              if ($IsCompleteVal -eq 0) {
-                  Write-Host "::error::[API FAILED] Kernel reports OOBE setup sequence is incomplete."
-                  $OOBE_Identified = $true
-              }
-          } catch {
-              Write-Warning "Kernel API verification dropped. Falling back to active state checks."
-          }
-
-          # 2. Setup System Registry Interrogation
-          $RegistrySetup = Get-ItemProperty -Path "HKLM:\SYSTEM\Setup" -ErrorAction SilentlyContinue
-          if ($RegistrySetup -and $RegistrySetup.OOBEInProgress -eq 1) {
-              Write-Host "::error::[REGISTRY FAILED] HKLM:\SYSTEM\Setup\OOBEInProgress is flagged active."
-              $OOBE_Identified = $true
-          }
-
-          # 3. Environment Context Profile Scanning
-          $RuntimeIdentity = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
-          if ($RuntimeIdentity -like "*defaultuser0*") {
-              Write-Host "::error::[IDENTITY FAILED] Execution bounded to restricted setup account: $RuntimeIdentity"
-              $OOBE_Identified = $true
-          }
-
-          # 4. Background Setup Process Discovery
-          if (Get-Process -Name "msoobe" -ErrorAction SilentlyContinue) {
-              Write-Host "::error::[PROCESS FAILED] Active 'msoobe.exe' setup wrapper process found running."
-              $OOBE_Identified = $true
-          }
-
-          # Pipeline Termination Engine
-          if ($OOBE_Identified) {
-              Write-Host "::error::Windows 11 ARM Workflow terminated: Environment is locked inside OOBE."
-              exit 1
-          }
-
-          Write-Output "Verification successful: Target environment clear of OOBE restrictions."
+        if ($OobeProcesses -or $TargetWindows) {
+            Write-Error "CRITICAL: Windows 11 ARM OOBE / Privacy screen detected!"
+            
+            if ($OobeProcesses) { 
+                Write-Host "Blocked by running processes:"
+                $OobeProcesses | Select-Object Name, Id, Path | Format-Table 
+            }
+            if ($TargetWindows) { 
+                Write-Host "Blocked by active window titles:"
+                $TargetWindows | Select-Object Name, MainWindowTitle | Format-Table 
+            }
+            
+            # Fail the step immediately
+            exit 1
+        } else {
+            Write-Host "SUCCESS: No OOBE block screens detected. Environment clean."
+        }
