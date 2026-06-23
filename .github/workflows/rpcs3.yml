@@ -1,53 +1,46 @@
-name: Windows Runner Screenshot
+name: Pure Windows Desktop Screenshot
 
 on:
   push:
     branches: [ main ]
-  workflow_dispatch: # Allows you to trigger the workflow manually from the GitHub UI
+  workflow_dispatch:
 
 jobs:
   screenshot-job:
-    runs-on: windows-2025-vs2026 # Targets a Windows runner
+    runs-on: windows-latest
 
     steps:
-      - name: Checkout repository code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Optional Step: Place your application startup or automated tests here
-      - name: Launch application or run tests
-        run: |
-          echo "The system is executing tasks..."
-          start calc.exe # Example: Open Windows Calculator to capture it on screen
-          Start-Sleep -Seconds 3
-
-      - name: Capture Windows Runner Desktop
-        shell: powershell # Required to execute the .NET graphics API
+      # No applications are opened here; it captures the native background state
+      - name: Capture Clean Desktop
+        shell: powershell
         run: |
           Add-Type -AssemblyName System.Windows.Forms
           Add-Type -AssemblyName System.Drawing
           
-          # Retrieve primary screen dimensions
+          # Grab primary display boundaries
           $screen = [System.Windows.Forms.Screen]::PrimaryScreen
           $bounds = $screen.Bounds
           
-          # Initialize bitmap image based on display size
+          # Generate empty canvas matching resolution
           $bitmap = New-Object System.Drawing.Bitmap($bounds.Width, $bounds.Height)
           $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
           
-          # Copy screen contents to the bitmap
+          # Snap the background
           $graphics.CopyFromScreen($bounds.X, $bounds.Y, 0, 0, $bounds.Size)
           
-          # Save image file to the workspace root directory
-          $bitmap.Save("windows-runner-screenshot.png", [System.Drawing.Imaging.ImageFormat]::Png)
+          # Export to workspace root
+          $bitmap.Save("clean-desktop-screenshot.png", [System.Drawing.Imaging.ImageFormat]::Png)
           
-          # Dispose graphical objects to clear memory
+          # Free resources
           $graphics.Dispose()
           $bitmap.Dispose()
-          Write-Host "Screenshot successfully saved as 'windows-runner-screenshot.png'"
+          Write-Host "Captured clean desktop environment!"
 
-      - name: Upload Screenshot Artifact
-        uses: actions/upload-artifact@v4 # Always use the latest stable version
-        if: always() # Ensures screenshots are uploaded even if previous steps fail
+      - name: Upload Desktop Artifact
+        uses: actions/upload-artifact@v4
         with:
-          name: runner-screenshots
-          path: windows-runner-screenshot.png
+          name: raw-desktop-view
+          path: clean-desktop-screenshot.png
