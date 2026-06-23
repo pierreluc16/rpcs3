@@ -10,14 +10,13 @@ on:
 jobs:
   check-oobe-state:
     name: Execute Low-Level OOBE API Check
-    # Ensure this runs on an ARM64-compatible runner if testing native ARM states
     runs-on: windows-11-arm
 
     steps:
       - name: Checkout Repository Code
         uses: actions/checkout@v4
 
-      # Step 1: Execute your custom Win32 API detection block
+      # Step 1: Run your low-level Win32 API detection block
       - name: Run Win32 OOBEComplete Detection Script
         id: win32_oobe_check
         continue-on-error: true
@@ -33,13 +32,13 @@ jobs:
               }
           }
           "@
-
-          # Compile the C# snippet into the session
+          
+          # Compile the C# snippet into the PowerShell session
           Add-Type -TypeDefinition $TypeDef -Language CSharp
-
+          
           $IsOOBEComplete = 0
           $Result = [Win32API::OobeCheck]::OOBEComplete([ref]$IsOOBEComplete)
-
+          
           if ($IsOOBEComplete -eq 0) {
               Write-Host "[DETECTED] Windows is currently inside the OOBE phase."
               exit 0
@@ -48,18 +47,17 @@ jobs:
               exit 1
           }
 
-      # Step 2: Evaluate the outcome of the detection script
+      # Step 2: Evaluate the outcome and trigger a critical failure if stuck
       - name: Process OOBE Detection Telemetry
         shell: powershell
         run: |
-          # If Step 1 returned 'exit 0' (Outcome: success), the machine is still stuck in OOBE
-          if ("${{ steps.win32_oobe_check.outcome }}" -eq "success") {
-              Write-Error "[OOBE STATE CRITICAL] Detection verified that the system is trapped in the active OOBE phase!"
+          # Evaluate the boolean status of the preceding Win32 step
+          $IsOobeTrapped = ("${{ steps.win32_oobe_check.outcome }}" -eq "success")
+
+          if ($IsOobeTrapped) {
+              Write-Output "::error::[CRITICAL FAILURE] OOBE state validation failed. The Windows 11 ARM system did not reach the desktop."
               exit 1
           }
-          
-          # If Step 1 returned 'exit 1' (Outcome: failure), OOBE is complete and the system is safe
-          if ("${{ steps.win32_oobe_check.outcome }}" -eq "failure") {
-              Write-Host "[OOBE STATE VALIDATED] Verification successful! OOBE is finished and desktop environment is active."
-              exit 0
-          }
+
+          Write-Output "[OOBE VALIDATED] Clean deployment confirmed. The system is ready."
+          exit 0
