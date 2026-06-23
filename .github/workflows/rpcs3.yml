@@ -45,3 +45,11 @@ jobs:
                 $ViolationDetected = $true
             }
         }
+
+        # 3. Halt execution immediately on detection
+        if ($ViolationDetected) {
+            Write-Host "OOBE environment check failed. Aborting workflow execution due to critical failure."
+            exit 1
+        } else {
+            Write-Host "Success: No OOBE or privacy screens detected. The runner environment is completely clean."
+        }
