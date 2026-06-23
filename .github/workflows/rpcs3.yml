@@ -1,6 +1,8 @@
 name: Windows 11 ARM OOBE Strict Detection
 
 on:
+  # Allows manual triggering from the GitHub Actions UI
+  workflow_dispatch:
   push:
     branches: [ main ]
   pull_request:
