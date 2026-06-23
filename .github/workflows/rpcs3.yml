@@ -1,19 +1,76 @@
-name: Check Requirements
+name: Windows 11 ARM64 LLVM Detection
 
 on:
   push:
+    branches: [ "main" ]
   pull_request:
-  workflow_dispatch: # Allows manual triggering from the Actions tab
+    branches: [ "main" ]
+  workflow_dispatch:
 
 jobs:
-  verify-dependencies:
-    runs-on: ubuntu-26.04
-
+  check-llvm-architecture:
+    # Target GitHub's official Windows 11 ARM64 runner
+    runs-on: windows-11-arm
+    
     steps:
-      - name: Check if libicu-dev is installed
-        run: |
-          if ! dpkg -s libicu-dev >/dev/null 2>&1; then
-            echo "Error: libicu-dev is missing!"
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Detect LLVM Binary Architecture (PowerShell)
+      id: detect_llvm
+      shell: pwsh
+      run: |
+        # Locate clang.exe via PATH or fallback to the standard installation path
+        $clangPath = Get-Command clang.exe -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source
+        if (-not $clangPath) { $clangPath = "C:\\Program Files\\LLVM\\bin\\clang.exe" }
+        
+        if (-not (Test-Path $clangPath)) {
+            Write-Error "LLVM/Clang was not found at path: $clangPath"
             exit 1
-          fi
-          echo "libicu-dev is installed."
+        }
+
+        Write-Host "Analyzing binary: $clangPath"
+
+        # Open the binary file to read the 'Machine Type' inside the PE header
+        $stream = New-Object System.IO.FileStream($clangPath, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read)
+        $reader = New-Object System.IO.BinaryReader($stream)
+        
+        # Read MZ Header magic number
+        $mz = $reader.ReadBytes(2)
+        # Seek to the PE header offset (stored at address 0x3C)
+        $stream.Seek(0x3C, [System.IO.SeekOrigin]::Begin)
+        $peOffset = $reader.ReadUInt32()
+        
+        # Seek to the Machine field in the COFF File Header (PE offset + 4 bytes of PE magic)
+        $stream.Seek(($peOffset + 4), [System.IO.SeekOrigin]::Begin)
+        $machineType = $reader.ReadUInt16()
+        
+        $reader.Close()
+        $stream.Close()
+        
+        # 0x8664 = IMAGE_FILE_MACHINE_AMD64 (x86_64)
+        # 0xAA64 = IMAGE_FILE_MACHINE_ARM64 (Native ARM64)
+        if ($machineType -eq 0x8664) {
+            Write-Host "⚠️ DETECTED: LLVM binary is an x86_64 (Intel 64-bit) version running under Windows emulation."
+            Add-Content -Path $env:GITHUB_ENV -Value "LLVM_IS_X86_64=true"
+        } elseif ($machineType -eq 0xAA64) {
+            Write-Host "✅ SUCCESS: LLVM binary is natively compiled for ARM64."
+            Add-Content -Path $env:GITHUB_ENV -Value "LLVM_IS_X86_64=false"
+        } else {
+            Write-Host "Unknown or unsupported machine type: $machineType"
+            Add-Content -Path $env:GITHUB_ENV -Value "LLVM_IS_X86_64=unknown"
+        }
+
+    - name: Action if LLVM is Emulated (x86_64)
+      if: env.LLVM_IS_X86_64 == 'true'
+      shell: pwsh
+      run: |
+        Write-Host "This step runs because LLVM is emulated (x86_64)."
+        # Add tasks here to handle the emulated version (e.g., download a native ARM64 LLVM archive)
+
+    - name: Action if LLVM is Native (ARM64)
+      if: env.LLVM_IS_X86_64 == 'false'
+      shell: pwsh
+      run: |
+        Write-Host "This step runs because LLVM is natively running on ARM64!"
+        clang --version
