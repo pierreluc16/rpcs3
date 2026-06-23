@@ -1,68 +1,90 @@
-# 1. Official workflow name appearing in the GitHub Actions tab
-name: Windows 11 ARM OOBE Detection Only
+name: Windows 11 ARM OOBE Complete Detection Pipeline
 
-# 2. Trigger: Configured exclusively for manual launching
 on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
   workflow_dispatch:
 
-# 3. Job definitions
 jobs:
-  strict-check:
-    # Explicitly targeting GitHub's official Windows 11 ARM64 hosted hardware
+  oobe-detection:
+    name: Verify Windows 11 ARM OOBE Finalization
+    # Utilizes the native Windows 11 ARM64 runner infrastructure
     runs-on: windows-11-arm
+    timeout-minutes: 30
 
     steps:
-    # Essential step to initialize the workspace on the runner
-    - name: Checkout Repository
-      uses: actions/checkout@v4
+      - name: Checkout Repository Code
+        uses: actions/checkout@v4
 
-    # Strict system scanning script with zero modifications to the OS
-    - name: Strict OOBE and Privacy Detection
-      shell: powershell
-      run: |
-        Write-Host "Scanning system environment for active Windows 11 OOBE trackers..."
-        $ViolationDetected = $false
+      # STEP 1: Execute your target system initialization or deployment
+      - name: Run Windows 11 ARM OOBE Process
+        id: oobe_execution
+        continue-on-error: true # Safe interception: prevents abrupt pipeline termination
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          Write-Host "Initializing target Windows 11 ARM deployment tasks..."
+          
+          # Replace the line below with your actual provisioning script or VM boot command
+          # Example: .\scripts\Deploy-Image.ps1 -Target "ARM64"
+          Write-Host "Simulation: System configuration payload executed."
 
-        # A. Analyze background system processes known to steal window focus
-        $OOBEProcesses = @("UserOOBEBroker", "CloudExperienceHost")
-        foreach ($proc in $OOBEProcesses) {
-            if (Get-Process -Name $proc -ErrorAction SilentlyContinue) {
-                # Creates a native red critical error banner on the GitHub run summary overview
-                Write-Host "::error title=OOBE Process Detected::CRITICAL FAILURE: OOBE background process '$proc' is actively running!"
-                $ViolationDetected = $true
-            }
-        }
+      # STEP 2: Native internal detection for active OOBE state
+      - name: Detect Active OOBE Status
+        id: oobe_detector
+        continue-on-error: true
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          Write-Host "=== Commencing OOBE State Detection ==="
+          
+          # 1. Compile C# Win32 wrapper to interop with Kernel32.dll for OOBEComplete API
+          $TypeDef = @"
+          using System;
+          using System.Runtime.InteropServices;
+          namespace Win32API {
+              public class OobeCheck {
+                  [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+                  public static extern int OOBEComplete(ref int bIsOOBEComplete);
+              }
+          }
+          "@
+          Add-Type -TypeDefinition $TypeDef -Language CSharp
+          
+          $IsOOBEComplete = 0
+          $Result = [Win32API::OobeCheck]::OOBEComplete([ref]$IsOOBEComplete)
+          
+          # 2. Extract Process Owner telemetry from the current active shell
+          $ExplorerProcess = Get-CimInstance -ClassName 'Win32_Process' -Filter "Name = 'explorer.exe'" -ErrorAction Ignore
+          $OwnerInfo = Invoke-CimMethod -InputObject $ExplorerProcess -MethodName GetOwner -ErrorAction Ignore
+          $ActiveShellUser = $OwnerInfo.User
+          
+          Write-Host "Telemetry -> OOBE API Code Response: $Result"
+          Write-Host "Telemetry -> API IsOOBEComplete Flag: $IsOOBEComplete (1 = Complete, 0 = In OOBE)"
+          Write-Host "Telemetry -> Active Windows Explorer Owner: $ActiveShellUser"
+          Write-Host "========================================="
+          
+          # 3. Assert Criteria: Fail step if API indicates OOBE or user is 'defaultuser0'
+          if ($IsOOBEComplete -eq 0) {
+              throw "[CRITICAL] Windows API states that the system is stuck inside the active OOBE loop."
+          }
+          
+          if ($ActiveShellUser -eq 'defaultuser0') {
+              throw "[CRITICAL] Session owner is 'defaultuser0'. The configuration phase never finalized."
+          }
+          
+          Write-Host "[SUCCESS] Windows 11 ARM has successfully passed OOBE."
 
-        # B. Analyze active graphical user interface windows opened by the OS
-        $OOBEWindows = Get-Process | Where-Object { 
-            $_.MainWindowTitle -like "*Privacy*" -or 
-            $_.MainWindowTitle -like "*Experience*" -or 
-            $_.MainWindowTitle -like "*Out-of-Box*" 
-        }
-        
-        if ($OOBEWindows) {
-            foreach ($win in $OOBEWindows) {
-                # Creates a native red critical error banner on the GitHub run summary overview
-                Write-Host "::error title=OOBE Window Detected::CRITICAL FAILURE: Interactive OOBE Window discovered! Title: '$($win.MainWindowTitle)'"
-                $ViolationDetected = $true
-            }
-        }
-
-        # C. Conclude diagnostic and manage the build state with summary reporting
-        if ($ViolationDetected) {
-            # Inject a prominent markdown alert onto the GitHub Actions Summary page
-            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "### :x: CRITICAL FAILURE: Windows 11 ARM OOBE Active"
-            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "The runner environment is compromised. Active OOBE background tasks or privacy setup windows were discovered."
-            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "#### Impact & Resolution:"
-            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "- **GUI Focus Lost**: Automated UI and application interaction tests will fail or timeout."
-            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "- **How to fix**: Re-trigger this manual run or update your workflow to inject the \`DisablePrivacyExperience\` registry patch before testing."
-            
-            Write-Host "OOBE environment check failed. Aborting workflow execution due to critical failure."
-            exit 1
-        } else {
-            # Inject a success notice onto the GitHub Actions Summary page
-            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "### :white_check_mark: Environment Verification Passed"
-            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "The Windows 11 ARM64 runner is clean. No focus-stealing system setup windows or OOBE components are active."
-            
-            Write-Host "Success: No OOBE or privacy screens detected. The runner environment is completely clean."
-        }
+      # STEP 3: Handle execution crashes from Step 1 OR assertion failures from Step 2
+      - name: Intercept and Handle Critical OOBE Failures
+        if: steps.oobe_execution.outcome == 'failure' || steps.oobe_detector.outcome == 'failure'
+        shell: powershell
+        run: |
+          Write-Host "::error::[OOBE DETECTED CRITICAL FAILURE] Execution halted. The target OS failed to resolve OOBE or crashed during provisioning."
+          
+          # Optional: Gather diagnostic files for review
+          # Compress-Archive -Path "C:\Windows\Panther\" -DestinationPath ".\oobe_panther_logs.zip" -ErrorAction Ignore
+          
+          exit 1
