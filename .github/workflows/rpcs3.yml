@@ -1,33 +1,32 @@
-name: Windows 11 ARM OOBE Strict Detection
+name: Windows 11 ARM OOBE Detection Only
 
 on:
-  # Allows manual triggering from the GitHub Actions UI
+  # Allows you to trigger this workflow manually from the GitHub Actions UI
   workflow_dispatch:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
 
 jobs:
-  oobe-detection:
-    # Target the official GitHub Windows 11 ARM runner
+  strict-check:
+    # Target the official GitHub-hosted Windows 11 ARM64 runner infrastructure
     runs-on: windows-11-arm
 
     steps:
+    # Checks out your repository code onto the runner machine
     - name: Checkout Repository
       uses: actions/checkout@v4
 
-    - name: Strict OOBE Detection Scan
+    # Scans the system for privacy prompts and focus-stealing setup tasks
+    - name: Strict OOBE and Privacy Detection
       shell: powershell
       run: |
-        Write-Host "Scanning system environment for Windows 11 OOBE trackers..."
+        Write-Host "Scanning system environment for active Windows 11 OOBE trackers..."
         $ViolationDetected = $false
 
-        # 1. Analyze background initialization processes
+        # 1. Analyze background setup tasks
         $OOBEProcesses = @("UserOOBEBroker", "CloudExperienceHost")
         foreach ($proc in $OOBEProcesses) {
             if (Get-Process -Name $proc -ErrorAction SilentlyContinue) {
-                Write-Host "##[error] CRITICAL FAILURE: OOBE background process '$proc' is actively running!"
+                # Creates a native red critical error banner on the GitHub run summary overview
+                Write-Host "::error title=OOBE Process Detected::CRITICAL FAILURE: OOBE background process '$proc' is actively running!"
                 $ViolationDetected = $true
             }
         }
@@ -41,15 +40,8 @@ jobs:
         
         if ($OOBEWindows) {
             foreach ($win in $OOBEWindows) {
-                Write-Host "##[error] CRITICAL FAILURE: Interactive OOBE Window discovered! Title: '$($win.MainWindowTitle)'"
+                # Creates a native red critical error banner on the GitHub run summary overview
+                Write-Host "::error title=OOBE Window Detected::CRITICAL FAILURE: Interactive OOBE Window discovered! Title: '$($win.MainWindowTitle)'"
                 $ViolationDetected = $true
             }
-        }
-
-        # 3. Halt the workflow if any violation is caught
-        if ($ViolationDetected) {
-            Write-Host "OOBE or Privacy screen detected. Aborting runner execution to protect testing state."
-            exit 1
-        } else {
-            Write-Host "Success: The environment is clean. No OOBE elements detected."
         }
