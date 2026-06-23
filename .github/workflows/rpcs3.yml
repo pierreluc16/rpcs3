@@ -1,4 +1,4 @@
-name: Windows 11 ARM LLVM Detection (Dumpbin)
+name: Windows 11 ARM LLVM Full Architecture Audit
 
 on:
   push:
@@ -8,68 +8,86 @@ on:
   workflow_dispatch:
 
 jobs:
-  check-llvm-architecture:
-    # Target GitHub's official Windows 11 ARM hosted runner
+  audit-llvm:
     runs-on: windows-11-arm
     
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Detect LLVM Binary Architecture (Dumpbin)
-      id: detect_llvm
-      shell: cmd
+    - name: Deep Scan LLVM Installation
+      shell: pwsh
       run: |
-        :: Initialize Visual Studio Developer Environment Variables
-        call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" arm64
+        $llvmPath = "C:\Program Files\LLVM"
         
-        :: Default path for LLVM installation
-        set "CLANG_PATH=C:\Program Files\LLVM\bin\clang.exe"
+        if (-not (Test-Path $llvmPath)) {
+            Write-Error "LLVM directory not found at $llvmPath"
+            exit 1
+        }
         
-        :: Verify file exists before analyzing
-        if not exist "%CLANG_PATH%" (
-            echo ERROR: LLVM/Clang was not found at %CLANG_PATH%
-            exit /b 1
-        )
+        Write-Host "🔍 Starting a deep 100% ARM64 audit on: $llvmPath"
         
-        echo Analyzing binary: %CLANG_PATH%
+        # Gather all executable and library files inside the folder recursively
+        $files = Get-ChildItem -Path $llvmPath -Recurse -Include *.exe, *.dll
         
-        :: Extract the machine architecture line from headers
-        dumpbin /headers "%CLANG_PATH%" | findstr /i "machine" > architecture_output.txt
-        type architecture_output.txt
-        
-        :: Check if the output lists x64 (AMD64) or ARM64 and set the GitHub Environment variable
-        findstr /i "x64" architecture_output.txt >nul
-        if %errorlevel%==0 (
-            echo ⚠️ DETECTED: LLVM binary is an x86_64 version running under Windows emulation.
-            echo LLVM_IS_X86_64=true>>"%GITHUB_ENV%"
-            goto :end
-        )
-        
-        findstr /i "ARM64" architecture_output.txt >nul
-        if %errorlevel%==0 (
-            echo ✅ SUCCESS: LLVM binary is natively compiled for ARM64.
-            echo LLVM_IS_X86_64=false>>"%GITHUB_ENV%"
-            goto :end
-        )
-        
-        :: Fallback if neither matches explicitly
-        echo Unknown machine type detected.
-        echo LLVM_IS_X86_64=unknown>>"%GITHUB_ENV%"
-        
-        :end
-        del architecture_output.txt
+        $nonArm64Binaries = @()
+        $totalChecked = 0
 
-    - name: Action if LLVM is Emulated (x86_64)
-      if: env.LLVM_IS_X86_64 == 'true'
-      shell: cmd
-      run: |
-        echo This step runs because LLVM is emulated (x86_64).
-        :: Add fallback tools or step configurations here
+        foreach ($file in $files) {
+            $totalChecked++
+            try {
+                # Open binary stream to parse PE headers safely
+                $stream = New-Object System.IO.FileStream($file.FullName, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::Read)
+                $reader = New-Object System.IO.BinaryReader($stream)
+                
+                # Verify DOS Magic Number (MZ)
+                $mz = $reader.ReadBytes(2)
+                if ($mz[0] -ne 0x4D -or $mz[1] -ne 0x5A) {
+                    $reader.Close(); $stream.Close(); continue # Skip if not a valid PE file
+                }
+                
+                # Seek to PE header offset
+                $stream.Seek(0x3C, [System.IO.SeekOrigin]::Begin)
+                $peOffset = $reader.ReadUInt32()
+                
+                # Seek to COFF Machine Type field (PE signature + 4 bytes)
+                $stream.Seek(($peOffset + 4), [System.IO.SeekOrigin]::Begin)
+                $machineType = $reader.ReadUInt16()
+                
+                $reader.Close()
+                $stream.Close()
+                
+                # 0xAA64 = IMAGE_FILE_MACHINE_ARM64
+                if ($machineType -ne 0xAA64) {
+                    # Determine architectural identity for reporting
+                    $archStr = switch ($machineType) {
+                        0x8664 { "x86_64 (AMD64)" }
+                        0x014c { "x86 (32-bit)" }
+                        0x01c4 { "ARM (32-bit)" }
+                        default { "Unknown (0x{0:X4})" -f $machineType }
+                    }
+                    
+                    Write-Host "❌ NON-ARM64 FOUND: $($file.FullName) -> Target: $archStr"
+                    $nonArm64Binaries += [PSCustomObject]@{
+                        Path = $file.FullName
+                        Arch = $archStr
+                    }
+                }
+            }
+            catch {
+                Write-Host "⚠️ Warning: Could not read $($file.FullName) - $_"
+            }
+        }
 
-    - name: Action if LLVM is Native (ARM64)
-      if: env.LLVM_IS_X86_64 == 'false'
-      shell: cmd
-      run: |
-        echo This step runs because LLVM is natively running on ARM64!
-        "C:\Program Files\LLVM\bin\clang.exe" --version
+        Write-Host "`n📊 Scan Summary:"
+        Write-Host "Total files checked: $totalChecked"
+        
+        if ($nonArm64Binaries.Count -gt 0) {
+            Write-Host "❌ FAILED: The LLVM installation is NOT 100% ARM64 native. Found $($nonArm64Binaries.Count) non-ARM64 files."
+            # Set environment variable flag for subsequent steps if needed
+            Add-Content -Path $env:GITHUB_ENV -Value "LLVM_IS_PURE_ARM64=false"
+            exit 1
+        } else {
+            Write-Host "✅ SUCCESS: The LLVM installation is 100% ARM64 native!"
+            Add-Content -Path $env:GITHUB_ENV -Value "LLVM_IS_PURE_ARM64=true"
+        }
