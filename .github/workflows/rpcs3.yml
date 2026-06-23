@@ -16,12 +16,15 @@ jobs:
       - name: Checkout Repository Code
         uses: actions/checkout@v4
 
-      # Step 1: Run your low-level Win32 API detection block
-      - name: Run Win32 OOBEComplete Detection Script
+      # Step 1: Execute the custom low-level Win32 API OOBE check
+      - name: Execute Native Win32 OOBE Detection Script
         id: win32_oobe_check
         continue-on-error: true
         shell: powershell
         run: |
+          $ErrorActionPreference = "Stop"
+          
+          # Define the C# signature to access kernel32.dll natively
           $TypeDef = @"
           using System;
           using System.Runtime.InteropServices;
@@ -32,13 +35,15 @@ jobs:
               }
           }
           "@
-          
-          # Compile the C# snippet into the PowerShell session
+
+          Write-Host "Compiling Win32 C# type definition..."
           Add-Type -TypeDefinition $TypeDef -Language CSharp
-          
+
           $IsOOBEComplete = 0
+          Write-Host "Querying system OOBE state via Kernel32 API..."
           $Result = [Win32API::OobeCheck]::OOBEComplete([ref]$IsOOBEComplete)
-          
+
+          # Evaluate API flag response
           if ($IsOOBEComplete -eq 0) {
               Write-Host "[DETECTED] Windows is currently inside the OOBE phase."
               exit 0
