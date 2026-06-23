@@ -1,49 +1,30 @@
-name: OOBE Provisioning Gate
+name: Strict OOBE Validation
 
 on:
   push:
-    branches:
-      - main
-      - master
+    branches: [ main, master ]
   pull_request:
-    branches:
-      - main
-      - master
+    branches: [ main, master ]
   workflow_dispatch:
 
 jobs:
-  audit-runner-state:
-    name: Pre-Flight System Audit
+  system-gate:
+    name: Critical System Check
     runs-on: windows-11-arm
-    timeout-minutes: 5
+    timeout-minutes: 3
 
     steps:
-    - name: Initialize Audit
+    - name: Scan Active Environment
       shell: powershell
       run: |
-        Write-Host "Initializing clean environment state verification..."
-        Write-Host "Runner OS: Windows 11 ARM64"
-
-    - name: Scan For Active OOBE Blockers
-      shell: powershell
-      run: |
-        # Query active system processes and window frame properties
-        $blockingProcesses = Get-Process | Where-Object { 
-            $_.Name -match 'CloudExperienceHost|wwahost|ConsentUx' -or 
-            $_.MainWindowTitle -match 'Privacy|Experience|OOBE' 
+        $blockers = Get-Process | Where-Object { 
+          $_.Name -match 'CloudExperienceHost|wwahost|ConsentUx' -or 
+          $_.MainWindowTitle -match 'Privacy|Experience|OOBE' 
         }
 
-        # Handle detection event
-        if ($blockingProcesses) {
-            # Inject a native, high-visibility error banner into the GitHub Actions log UI
-            Write-Output "::error title=CRITICAL RUNNER FAILURE::A Windows 11 setup or privacy dialog is blocking the interactive desktop layer. Terminating job to prevent automated runner timeout."
-            
-            # Print detailed diagnostics of the offending processes to the logs
-            Write-Host "--- Diagnostic Dump ---"
-            $blockingProcesses | Select-Object Name, Id, MainWindowTitle | Format-Table -AutoSize
-            
-            # Force immediate shell termination
-            exit 1
+        if ($blockers) {
+          Write-Output "::error title=CRITICAL RUNNER FAILURE::Windows 11 OOBE/Privacy dialog detected. Halting pipeline execution immediately."
+          exit 1
         }
 
-        Write-Host "SUCCESS: No active setup hooks or blocking window frames detected. Environment is stable."
+        Write-Host "System check passed: No blocking interfaces detected."
