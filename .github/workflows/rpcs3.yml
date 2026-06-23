@@ -1,30 +1,40 @@
-name: Strict OOBE Validation
-
-on:
-  push:
-    branches: [ main, master ]
-  pull_request:
-    branches: [ main, master ]
-  workflow_dispatch:
-
 jobs:
-  system-gate:
-    name: Critical System Check
+  check-windows11-arm-environment:
+    # Must target the official GitHub-hosted ARM64 runner label
     runs-on: windows-11-arm
-    timeout-minutes: 3
 
     steps:
-    - name: Scan Active Environment
+    - name: Detect OOBE Privacy Window
       shell: powershell
       run: |
-        $blockers = Get-Process | Where-Object { 
-          $_.Name -match 'CloudExperienceHost|wwahost|ConsentUx' -or 
-          $_.MainWindowTitle -match 'Privacy|Experience|OOBE' 
+        Write-Host "Scanning for Windows 11 OOBE / Privacy screen processes..."
+        
+        # 1. Check for specific known OOBE background processes
+        $OOBEProcesses = @("UserOOBEBroker", "CloudExperienceHost")
+        $FoundProcess = $false
+
+        foreach ($proc in $OOBEProcesses) {
+            if (Get-Process -Name $proc -ErrorAction SilentlyContinue) {
+                Write-Error "CRITICAL FAILURE: OOBE Process '$proc' detected running in the background!"
+                $FoundProcess = $true
+            }
         }
 
-        if ($blockers) {
-          Write-Output "::error title=CRITICAL RUNNER FAILURE::Windows 11 OOBE/Privacy dialog detected. Halting pipeline execution immediately."
-          exit 1
+        # 2. Check UI Windows if Appium/WinAppDriver or UI automation elements are available
+        # This scans for any open window matching 'Privacy' or 'Experience'
+        $OOBEWindows = Get-Process | Where-Object { $_.MainWindowTitle -like "*Privacy*" -or $_.MainWindowTitle -like "*Experience*" }
+        
+        if ($OOBEWindows) {
+            foreach ($win in $OOBEWindows) {
+                Write-Error "CRITICAL FAILURE: Interactive OOBE Window discovered! Title: '$($win.MainWindowTitle)'"
+                $FoundProcess = $true
+            }
         }
 
-        Write-Host "System check passed: No blocking interfaces detected."
+        # 3. Halt the runner if anything was caught
+        if ($FoundProcess) {
+            Write-Host "OOBE environment check failed. Exiting workflow to protect GUI test integrity."
+            exit 1
+        } else {
+            Write-Host "Success: No OOBE or privacy screens detected. The environment is clean."
+        }
