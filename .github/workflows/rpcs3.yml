@@ -1,40 +1,53 @@
+name: Windows 11 ARM OOBE Strict Detection
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
 jobs:
-  check-windows11-arm-environment:
-    # Must target the official GitHub-hosted ARM64 runner label
+  oobe-detection:
+    # Target the official GitHub Windows 11 ARM runner
     runs-on: windows-11-arm
 
     steps:
-    - name: Detect OOBE Privacy Window
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Strict OOBE Detection Scan
       shell: powershell
       run: |
-        Write-Host "Scanning for Windows 11 OOBE / Privacy screen processes..."
-        
-        # 1. Check for specific known OOBE background processes
-        $OOBEProcesses = @("UserOOBEBroker", "CloudExperienceHost")
-        $FoundProcess = $false
+        Write-Host "Scanning system environment for Windows 11 OOBE trackers..."
+        $ViolationDetected = $false
 
+        # 1. Analyze background initialization processes
+        $OOBEProcesses = @("UserOOBEBroker", "CloudExperienceHost")
         foreach ($proc in $OOBEProcesses) {
             if (Get-Process -Name $proc -ErrorAction SilentlyContinue) {
-                Write-Error "CRITICAL FAILURE: OOBE Process '$proc' detected running in the background!"
-                $FoundProcess = $true
+                Write-Host "##[error] CRITICAL FAILURE: OOBE background process '$proc' is actively running!"
+                $ViolationDetected = $true
             }
         }
 
-        # 2. Check UI Windows if Appium/WinAppDriver or UI automation elements are available
-        # This scans for any open window matching 'Privacy' or 'Experience'
-        $OOBEWindows = Get-Process | Where-Object { $_.MainWindowTitle -like "*Privacy*" -or $_.MainWindowTitle -like "*Experience*" }
+        # 2. Analyze active Graphical User Interface (GUI) windows
+        $OOBEWindows = Get-Process | Where-Object { 
+            $_.MainWindowTitle -like "*Privacy*" -or 
+            $_.MainWindowTitle -like "*Experience*" -or 
+            $_.MainWindowTitle -like "*Out-of-Box*" 
+        }
         
         if ($OOBEWindows) {
             foreach ($win in $OOBEWindows) {
-                Write-Error "CRITICAL FAILURE: Interactive OOBE Window discovered! Title: '$($win.MainWindowTitle)'"
-                $FoundProcess = $true
+                Write-Host "##[error] CRITICAL FAILURE: Interactive OOBE Window discovered! Title: '$($win.MainWindowTitle)'"
+                $ViolationDetected = $true
             }
         }
 
-        # 3. Halt the runner if anything was caught
-        if ($FoundProcess) {
-            Write-Host "OOBE environment check failed. Exiting workflow to protect GUI test integrity."
+        # 3. Halt the workflow if any violation is caught
+        if ($ViolationDetected) {
+            Write-Host "OOBE or Privacy screen detected. Aborting runner execution to protect testing state."
             exit 1
         } else {
-            Write-Host "Success: No OOBE or privacy screens detected. The environment is clean."
+            Write-Host "Success: The environment is clean. No OOBE elements detected."
         }
