@@ -10,15 +10,14 @@ on:
 jobs:
   check-oobe-state:
     name: Execute Low-Level OOBE API Check
-    runs-on: windows-latest
+    # Ensure this runs on an ARM64-compatible runner if testing native ARM states
+    runs-on: windows-11-arm
 
     steps:
       - name: Checkout Repository Code
         uses: actions/checkout@v4
 
       # Step 1: Execute your custom Win32 API detection block
-      # Note: continue-on-error catches your 'exit 1' when OOBE is not active
-       rebellion:
       - name: Run Win32 OOBEComplete Detection Script
         id: win32_oobe_check
         continue-on-error: true
