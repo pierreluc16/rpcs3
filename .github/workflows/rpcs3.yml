@@ -5,6 +5,7 @@ on:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
+  workflow_dispatch: # Allows you to manually launch this workflow from the GitHub UI
 
 jobs:
   validate-environment:
