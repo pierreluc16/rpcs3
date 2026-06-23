@@ -6,7 +6,7 @@ on:
 
 jobs:
   check-oobe:
-    runs-on: windows-11-arm64
+    runs-on: windows-11-arm
 
     steps:
     - name: Scan for OOBE Blockers
