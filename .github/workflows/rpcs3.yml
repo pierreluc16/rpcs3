@@ -1,52 +1,19 @@
-name: Windows Runner Screenshot
+name: Check Requirements
 
-on: [push, workflow_dispatch]
+on:
+  push:
+  pull_request:
+  workflow_dispatch: # Allows manual triggering from the Actions tab
 
 jobs:
-  screenshot-job:
-    runs-on: windows-latest
+  verify-dependencies:
+    runs-on: ubuntu-26.04
 
     steps:
-      - name: Checkout du code
-        uses: actions/checkout@v4
-
-      # Étape de démonstration facultative (Remplacez-la par vos propres tests, builds ou scripts UI)
-      - name: Ouvrir une application (Exemple)
+      - name: Check if libicu-dev is installed
         run: |
-          start notepad.exe
-          Start-Sleep -Seconds 3
-
-      - name: Capturer l'écran du Runner Windows
-        shell: powershell
-        run: |
-          # Charger les assemblages graphiques .NET necessaires
-          Add-Type -AssemblyName System.Windows.Forms
-          Add-Type -AssemblyName System.Drawing
-
-          # Recuperer les dimensions de l'ecran principal
-          $screen = [System.Windows.Forms.Screen]::PrimaryScreen
-          $bounds = $screen.Bounds
-
-          # Creer une image bitmap aux dimensions de l'ecran
-          $bitmap = New-Object System.Drawing.Bitmap($bounds.Width, $bounds.Height)
-          $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
-
-          # Copier l'affichage de l'ecran dans le bitmap
-          $graphics.CopyFromScreen($bounds.X, $bounds.Y, 0, 0, $bounds.Size)
-
-          # Definir le chemin de sauvegarde et enregistrer l'image au format PNG
-          $outputPath = Join-Path $env:GITHUB_WORKSPACE "screenshot.png"
-          $bitmap.Save($outputPath, [System.Drawing.Imaging.ImageFormat]::Png)
-
-          # Liberer la memoire
-          $graphics.Dispose()
-          $bitmap.Dispose()
-          
-          Write-Host "Capture d'ecran reussie et enregistree a l'emplacement : $outputPath"
-
-      - name: Téléverser la capture d'écran comme Artefact
-        uses: actions/upload-artifact@v4
-        with:
-          name: windows-desktop-screenshot
-          path: screenshot.png
-          if-no-files-found: error
+          if ! dpkg -s libicu-dev >/dev/null 2>&1; then
+            echo "Error: libicu-dev is missing!"
+            exit 1
+          fi
+          echo "libicu-dev is installed."
