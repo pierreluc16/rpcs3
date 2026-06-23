@@ -1,46 +1,52 @@
-name: Windows Desktop Screenshot
+name: Windows Runner Screenshot
 
-on:
-  push:
-    branches: [ main ]
-  workflow_dispatch:
+on: [push, workflow_dispatch]
 
 jobs:
   screenshot-job:
-    runs-on: windows-11-arm
+    runs-on: windows-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout du code
         uses: actions/checkout@v4
 
-      # No applications are opened here; it captures the native background state
-      - name: Capture Clean Desktop
+      # Étape de démonstration facultative (Remplacez-la par vos propres tests, builds ou scripts UI)
+      - name: Ouvrir une application (Exemple)
+        run: |
+          start notepad.exe
+          Start-Sleep -Seconds 3
+
+      - name: Capturer l'écran du Runner Windows
         shell: powershell
         run: |
+          # Charger les assemblages graphiques .NET necessaires
           Add-Type -AssemblyName System.Windows.Forms
           Add-Type -AssemblyName System.Drawing
-          
-          # Grab primary display boundaries
+
+          # Recuperer les dimensions de l'ecran principal
           $screen = [System.Windows.Forms.Screen]::PrimaryScreen
           $bounds = $screen.Bounds
-          
-          # Generate empty canvas matching resolution
+
+          # Creer une image bitmap aux dimensions de l'ecran
           $bitmap = New-Object System.Drawing.Bitmap($bounds.Width, $bounds.Height)
           $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
-          
-          # Snap the background
+
+          # Copier l'affichage de l'ecran dans le bitmap
           $graphics.CopyFromScreen($bounds.X, $bounds.Y, 0, 0, $bounds.Size)
-          
-          # Export to workspace root
-          $bitmap.Save("clean-desktop-screenshot.png", [System.Drawing.Imaging.ImageFormat]::Png)
-          
-          # Free resources
+
+          # Definir le chemin de sauvegarde et enregistrer l'image au format PNG
+          $outputPath = Join-Path $env:GITHUB_WORKSPACE "screenshot.png"
+          $bitmap.Save($outputPath, [System.Drawing.Imaging.ImageFormat]::Png)
+
+          # Liberer la memoire
           $graphics.Dispose()
           $bitmap.Dispose()
-          Write-Host "Captured clean desktop environment!"
+          
+          Write-Host "Capture d'ecran reussie et enregistree a l'emplacement : $outputPath"
 
-      - name: Upload Desktop Artifact
+      - name: Téléverser la capture d'écran comme Artefact
         uses: actions/upload-artifact@v4
         with:
-          name: raw-desktop-view
-          path: clean-desktop-screenshot.png
+          name: windows-desktop-screenshot
+          path: screenshot.png
+          if-no-files-found: error
