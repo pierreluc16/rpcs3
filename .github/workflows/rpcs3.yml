@@ -42,7 +42,7 @@ jobs:
           $IsOOBEComplete = 0
           Write-Host "Querying system OOBE state via Kernel32 API..."
           
-          # FIXED SYNTAX: Changed from [Win32API::OobeCheck]::OOBEComplete to [Win32API.OobeCheck]::OOBEComplete
+          # FIXED SYNTAX: Resolves the 'Missing ]' ParseException
           $Result = [Win32API.OobeCheck]::OOBEComplete([ref]$IsOOBEComplete)
 
           # Evaluate API flag response
