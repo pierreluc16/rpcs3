@@ -1,4 +1,4 @@
-name: Check Windows 11 ARM OOBE Status
+name: Check Windows 11 OOBE Status
 
 on: [push, pull_request]
 
@@ -7,21 +7,17 @@ jobs:
     runs-on: windows-11-arm 
 
     steps:
-      - name: Detect OS Architecture and OOBE Block
+      - name: Detect OOBE Block
         id: check_oobe
         shell: powershell
         run: |
-          # 1. Verify strict ARM64 architecture
-          $arch = $env:PROCESSOR_ARCHITECTURE
-          Write-Host "Detected Architecture: $arch"
-
-          # 2. Query Windows Registry for Setup/OOBE status
+          # 1. Query Windows Registry for Setup/OOBE status
           $oobePath = "HKLM:\SYSTEM\Setup\Status\ChildCompletion"
           $setupStatus = (Get-ItemProperty -Path $oobePath).Setup.exe
           Write-Host "OOBE Setup Status Code: $setupStatus"
 
-          # 3. Trigger critical red failure if it is ARM64 AND OOBE is not completed
-          if ("$arch" -eq "ARM64" -and "$setupStatus" -ne "3") {
+          # 2. Trigger critical red failure if OOBE is not completed
+          if ("$setupStatus" -ne "3") {
               Write-Output "::error::CRITICAL FAILURE: Windows 11 ARM runner is locked in OOBE state!"
               exit 1
           } else {
