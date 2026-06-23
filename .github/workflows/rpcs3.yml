@@ -1,50 +1,20 @@
-name: Check Windows 11 ARM OOBE Status
+name: Strict OOBE Validation
 
-on:
-  push:
-    branches: [ main, master ]
-  workflow_dispatch:
+on: [push, workflow_dispatch]
 
 jobs:
-  oobe-validation:
-    # Runs on GitHub-hosted or self-hosted Windows 11 ARM64 environments
+  validate:
     runs-on: windows-11-arm
-
     steps:
-    - name: Run OOBE Blocker Check
+    - name: Scan and Fail on Blocker
       shell: powershell
       run: |
-        Write-Host "Checking runner for unsuppressed Windows 11 OOBE/Privacy settings screens..."
-
-        # 1. Look for known Windows first-run provisioning processes
-        $OobeProcesses = Get-Process -Name "CloudExperienceHost*", "wwahost", "ConsentUx" -ErrorAction SilentlyContinue
-
-        # 2. Inspect active UI threads for OOBE/Privacy keywords taking window focus
-        $TargetWindows = Get-Process | Where-Object { 
-            $_.MainWindowTitle -match "Privacy" -or 
-            $_.MainWindowTitle -match "Experience" -or 
-            $_.MainWindowTitle -match "OOBE" 
+        $blockers = Get-Process | Where-Object { 
+          $_.Name -match 'CloudExperienceHost|wwahost|ConsentUx' -or 
+          $_.MainWindowTitle -match 'Privacy|Experience|OOBE' 
         }
-
-        # 3. Handle results and force a clean failure if caught
-        if ($OobeProcesses -or $TargetWindows) {
-            Write-Error "====================================================================="
-            Write-Error "DETECTION TRIGGERED: Windows 11 ARM OOBE or Privacy dialog detected."
-            Write-Error "Failing the job now to prevent the runner from hanging until timeout."
-            Write-Error "====================================================================="
-
-            if ($OobeProcesses) {
-                Write-Host "Blocking Processes Found:"
-                $OobeProcesses | Select-Object Name, Id, Path | Format-Table -AutoSize
-            }
-
-            if ($TargetWindows) {
-                Write-Host "Blocking Active Window Titles Found:"
-                $TargetWindows | Select-Object Name, MainWindowTitle | Format-Table -AutoSize
-            }
-
-            # Terminate step immediately with exit code 1
-            exit 1
+        if ($blockers) {
+          [System.Console]::Error.WriteLine("::error title=CRITICAL SYSTEM BLOCKER DETECTED::Windows 11 OOBE/Privacy dialog is currently freezing the UI automation context.")
+          exit 1
         }
-
-        Write-Host "SUCCESS: No OOBE or active privacy screen hooks detected. System is responsive."
+        Write-Host "No blocking interfaces found."
