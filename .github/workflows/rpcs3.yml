@@ -1,4 +1,4 @@
-name: Windows 11 ARM LLVM Detection
+name: Windows 11 ARM LLVM Detection (Dumpbin)
 
 on:
   push:
@@ -16,61 +16,60 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Detect LLVM Binary Architecture (PowerShell)
+    - name: Detect LLVM Binary Architecture (Dumpbin)
       id: detect_llvm
-      shell: pwsh
+      shell: cmd
       run: |
-        # Locate clang.exe via PATH or fallback to the standard installation path
-        $clangPath = Get-Command clang.exe -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source
-        if (-not $clangPath) { $clangPath = "C:\Program Files\LLVM\bin\clang.exe" }
+        :: Initialize Visual Studio Developer Environment Variables
+        call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" arm64
         
-        if (-not (Test-Path $clangPath)) {
-            Write-Error "LLVM/Clang was not found at path: $clangPath"
-            exit 1
-        }
-
-        Write-Host "Analyzing binary: $clangPath"
-
-        # Open the binary file to read the 'Machine Type' inside the PE header
-        $stream = New-Object System.IO.FileStream($clangPath, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read)
-        $reader = New-Object System.IO.BinaryReader($stream)
+        :: Default path for LLVM installation
+        set "CLANG_PATH=C:\Program Files\LLVM\bin\clang.exe"
         
-        # Read MZ Header magic number
-        $mz = $reader.ReadBytes(2)
-        # Seek to the PE header offset (stored at address 0x3C)
-        $stream.Seek(0x3C, [System.IO.SeekOrigin]::Begin)
-        $peOffset = $reader.ReadUInt32()
+        :: Verify file exists before analyzing
+        if not exist "%CLANG_PATH%" (
+            echo ERROR: LLVM/Clang was not found at %CLANG_PATH%
+            exit /b 1
+        )
         
-        # Seek to the Machine field in the COFF File Header (PE offset + 4 bytes of PE magic)
-        $stream.Seek(($peOffset + 4), [System.IO.SeekOrigin]::Begin)
-        $machineType = $reader.ReadUInt16()
+        echo Analyzing binary: %CLANG_PATH%
         
-        $reader.Close()
-        $stream.Close()
+        :: Extract the machine architecture line from headers
+        dumpbin /headers "%CLANG_PATH%" | findstr /i "machine" > architecture_output.txt
+        type architecture_output.txt
         
-        # 0x8664 = IMAGE_FILE_MACHINE_AMD64 (x86_64)
-        # 0xAA64 = IMAGE_FILE_MACHINE_ARM64 (Native ARM64)
-        if ($machineType -eq 0x8664) {
-            Write-Host "⚠️ DETECTED: LLVM binary is an x86_64 (Intel 64-bit) version running under Windows emulation."
-            Add-Content -Path $env:GITHUB_ENV -Value "LLVM_IS_X86_64=true"
-        } elseif ($machineType -eq 0xAA64) {
-            Write-Host "✅ SUCCESS: LLVM binary is natively compiled for ARM64."
-            Add-Content -Path $env:GITHUB_ENV -Value "LLVM_IS_X86_64=false"
-        } else {
-            Write-Host "Unknown or unsupported machine type: $machineType"
-            Add-Content -Path $env:GITHUB_ENV -Value "LLVM_IS_X86_64=unknown"
-        }
+        :: Check if the output lists x64 (AMD64) or ARM64 and set the GitHub Environment variable
+        findstr /i "x64" architecture_output.txt >nul
+        if %errorlevel%==0 (
+            echo ⚠️ DETECTED: LLVM binary is an x86_64 version running under Windows emulation.
+            echo LLVM_IS_X86_64=true>>"%GITHUB_ENV%"
+            goto :end
+        )
+        
+        findstr /i "ARM64" architecture_output.txt >nul
+        if %errorlevel%==0 (
+            echo ✅ SUCCESS: LLVM binary is natively compiled for ARM64.
+            echo LLVM_IS_X86_64=false>>"%GITHUB_ENV%"
+            goto :end
+        )
+        
+        :: Fallback if neither matches explicitly
+        echo Unknown machine type detected.
+        echo LLVM_IS_X86_64=unknown>>"%GITHUB_ENV%"
+        
+        :end
+        del architecture_output.txt
 
     - name: Action if LLVM is Emulated (x86_64)
       if: env.LLVM_IS_X86_64 == 'true'
-      shell: pwsh
+      shell: cmd
       run: |
-        Write-Host "This step runs because LLVM is emulated (x86_64)."
-        # Add tasks here to handle the emulated version (e.g., download a native ARM64 LLVM archive)
+        echo This step runs because LLVM is emulated (x86_64).
+        :: Add fallback tools or step configurations here
 
     - name: Action if LLVM is Native (ARM64)
       if: env.LLVM_IS_X86_64 == 'false'
-      shell: pwsh
+      shell: cmd
       run: |
-        Write-Host "This step runs because LLVM is natively running on ARM64!"
-        clang --version
+        echo This step runs because LLVM is natively running on ARM64!
+        "C:\Program Files\LLVM\bin\clang.exe" --version
