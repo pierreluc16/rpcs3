@@ -1,27 +1,29 @@
+# 1. Official workflow name appearing in the GitHub Actions tab
 name: Windows 11 ARM OOBE Detection Only
 
+# 2. Trigger: Configured exclusively for manual launching
 on:
-  # Allows you to trigger this workflow manually from the GitHub Actions UI
   workflow_dispatch:
 
+# 3. Job definitions
 jobs:
   strict-check:
-    # Target the official GitHub-hosted Windows 11 ARM64 runner infrastructure
+    # Explicitly targeting GitHub's official Windows 11 ARM64 hosted hardware
     runs-on: windows-11-arm
 
     steps:
-    # Checks out your repository code onto the runner machine
+    # Essential step to initialize the workspace on the runner
     - name: Checkout Repository
       uses: actions/checkout@v4
 
-    # Scans the system for privacy prompts and focus-stealing setup tasks
+    # Strict system scanning script with zero modifications to the OS
     - name: Strict OOBE and Privacy Detection
       shell: powershell
       run: |
         Write-Host "Scanning system environment for active Windows 11 OOBE trackers..."
         $ViolationDetected = $false
 
-        # 1. Analyze background setup tasks
+        # A. Analyze background system processes known to steal window focus
         $OOBEProcesses = @("UserOOBEBroker", "CloudExperienceHost")
         foreach ($proc in $OOBEProcesses) {
             if (Get-Process -Name $proc -ErrorAction SilentlyContinue) {
@@ -31,7 +33,7 @@ jobs:
             }
         }
 
-        # 2. Analyze active Graphical User Interface (GUI) windows
+        # B. Analyze active graphical user interface windows opened by the OS
         $OOBEWindows = Get-Process | Where-Object { 
             $_.MainWindowTitle -like "*Privacy*" -or 
             $_.MainWindowTitle -like "*Experience*" -or 
@@ -46,10 +48,21 @@ jobs:
             }
         }
 
-        # 3. Halt execution immediately on detection
+        # C. Conclude diagnostic and manage the build state with summary reporting
         if ($ViolationDetected) {
+            # Inject a prominent markdown alert onto the GitHub Actions Summary page
+            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "### :x: CRITICAL FAILURE: Windows 11 ARM OOBE Active"
+            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "The runner environment is compromised. Active OOBE background tasks or privacy setup windows were discovered."
+            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "#### Impact & Resolution:"
+            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "- **GUI Focus Lost**: Automated UI and application interaction tests will fail or timeout."
+            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "- **How to fix**: Re-trigger this manual run or update your workflow to inject the \`DisablePrivacyExperience\` registry patch before testing."
+            
             Write-Host "OOBE environment check failed. Aborting workflow execution due to critical failure."
             exit 1
         } else {
+            # Inject a success notice onto the GitHub Actions Summary page
+            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "### :white_check_mark: Environment Verification Passed"
+            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "The Windows 11 ARM64 runner is clean. No focus-stealing system setup windows or OOBE components are active."
+            
             Write-Host "Success: No OOBE or privacy screens detected. The runner environment is completely clean."
         }
