@@ -4,7 +4,6 @@ on: [push, pull_request]
 
 jobs:
   check-environment:
-    # Targets the GitHub-hosted Windows 11 ARM runner
     runs-on: windows-11-arm 
 
     steps:
@@ -17,14 +16,13 @@ jobs:
           Write-Host "Detected Architecture: $arch"
 
           # 2. Query Windows Registry for Setup/OOBE status
-          # A value of 3 means Setup and OOBE are successfully completed.
           $oobePath = "HKLM:\SYSTEM\Setup\Status\ChildCompletion"
           $setupStatus = (Get-ItemProperty -Path $oobePath).Setup.exe
           Write-Host "OOBE Setup Status Code: $setupStatus"
 
-          # 3. Trigger critical failure if it is ARM64 AND OOBE is not completed
+          # 3. Trigger critical red failure if it is ARM64 AND OOBE is not completed
           if ("$arch" -eq "ARM64" -and "$setupStatus" -ne "3") {
-              Write-Error "CRITICAL FAILURE: Windows 11 ARM runner is locked in OOBE state!"
+              Write-Output "::error::CRITICAL FAILURE: Windows 11 ARM runner is locked in OOBE state!"
               exit 1
           } else {
               Write-Host "Environment is valid. Proceeding..."
