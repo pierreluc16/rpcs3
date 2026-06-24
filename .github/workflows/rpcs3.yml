@@ -1,35 +1,33 @@
-name: Diagnostic Environment Test
+name: Strict Error Verification Test
 
 on:
   push:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
-  # Enables the manual "Run workflow" button in the GitHub Actions UI
+  # Allows manual triggering from the Actions tab UI
   workflow_dispatch:
 
 jobs:
-  check-env:
+  verify-error:
     runs-on: ubuntu-24.04-arm
 
     steps:
     - name: Checkout Code
       uses: actions/checkout@v4
 
-    - name: Test LLVM Config Existence
-      run: |
-        echo "=== Searching for global llvm-config ==="
-        which llvm-config || echo "No global llvm-config binary found."
-        
-        echo "=== Searching for versioned llvm-config binaries ==="
-        find /usr/bin -name "llvm-config*" 2>/dev/null || true
+    - name: Set up Rust Toolchain
+      uses: dtolnay/rust-toolchain@stable
 
-    - name: Test Libclang Shared Library Presence
+    - name: Diagnostic System Sweep
       run: |
-        echo "=== Searching for libclang.so instances ==="
+        echo "=== Locating any native llvm-config ==="
+        which llvm-config || echo "No default llvm-config executable found in PATH."
+        find /usr/bin /usr/local/bin -name "llvm-config*" 2>/dev/null || true
+        
+        echo "=== Locating any native libclang shared libraries ==="
         find /usr/lib /usr/local/lib /lib -name "libclang.so*" 2>/dev/null || true
 
-    - name: Test Cargo Clang Binding Check
-      # Isolates and tests only the clang-sys dependency to see if it passes or crashes
-      run: |
-        cargo check -p clang-sys --verbose || echo "Check failed as expected without specific environment configuration."
+    - name: Execute Cargo Check
+      # Running this without environment variables will reproduce your exact errors if they still exist
+      run: cargo check -p clang-sys --verbose
