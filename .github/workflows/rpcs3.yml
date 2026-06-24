@@ -1,65 +1,50 @@
-name: Check If LLVM and Libclang Are Installed
+name: Verify Pre-installed LLVM and LibClang on Ubuntu ARM
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main ]
   pull_request:
-    branches: [ main, master ]
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:
-  check-installation:
+  verify-preinstalled:
+    # Key Update: Configured to use the official GitHub ARM runner string
     runs-on: ubuntu-24.04-arm
 
     steps:
-      - name: Verify Hardware Platform
-        run: |
-          echo "=== Target Architecture ==="
-          uname -m
-          echo "=== OS Distribution ==="
-          lsb_release -d
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - name: Check llvm-config Command
+      - name: Locate pre-installed llvm-config
         run: |
-          echo "=== Checking for llvm-config ==="
+          # Sequential fallback lookup for Ubuntu 24.04 toolchain versions
+          LLVM_CONF=$(which llvm-config-18 || which llvm-config-19 || which llvm-config-17 || which llvm-config)
           
-          # Check global path first
-          if command -v llvm-config &> /dev/null; then
-            echo "✅ Global llvm-config command found!"
-            which llvm-config
-            llvm-config --version
-          else
-            echo "ℹ️ Generic 'llvm-config' command is NOT in the global PATH."
-            echo "Searching for versioned binaries in /usr/bin/:"
-            
-            # Listing without crashing if empty
-            ls -l /usr/bin/llvm-config* 2>/dev/null || echo "❌ No llvm-config binaries found at all."
+          if [ -z "$LLVM_CONF" ]; then
+            echo "Error: llvm-config could not be found in the system path."
+            exit 1
           fi
+          
+          echo "Found: $LLVM_CONF"
+          $LLVM_CONF --version
+          
+          # Set up an environment variable for downstream build steps
+          echo "LLVM_CONFIG_PATH=$LLVM_CONF" >> $GITHUB_ENV
 
-      - name: Check libclang Binary Files
+      - name: Locate pre-installed libclang.so
         run: |
-          echo "=== Checking for libclang shared libraries ==="
+          # Prioritize the native multiarch ARM64 Linux library folder to save scan time
+          LIBCLANG_FILE=$(find /usr/lib/aarch64-linux-gnu /usr/lib -name "libclang.so*" 2>/dev/null | head -n 1)
           
-          # Safe execution: find will not cause step to fail with '|| true'
-          LIB_PATHS=$(find /usr/lib /usr/local/lib -name "libclang.so*" 2>/dev/null || true)
-          
-          if [ -n "$LIB_PATHS" ]; then
-            echo "✅ libclang binaries are installed at:"
-            echo "$LIB_PATHS"
-          else
-            echo "❌ No libclang.so files found in standard library paths."
+          if [ -z "$LIBCLANG_FILE" ]; then
+            echo "Error: libclang.so shared object could not be found."
+            exit 1
           fi
-
-      - name: Check Clang C Header Files
-        run: |
-          echo "=== Checking for libclang Header Files ==="
           
-          # The entire pipeline finishes with '|| true' so an empty match returns exit code 0
-          HEADER_PATHS=$(find /usr/include /usr/local/include /usr/lib/llvm* -name "Index.h" 2>/dev/null | grep "clang-c" || true)
+          LIBCLANG_DIR=$(dirname "$LIBCLANG_FILE")
+          echo "LibClang directory found at: $LIBCLANG_DIR"
           
-          if [ -n "$HEADER_PATHS" ]; then
-            echo "✅ libclang headers are installed at:"
-            echo "$HEADER_PATHS"
-          else
-            echo "❌ Index.h (clang-c) NOT found. Development headers are completely missing."
-          fi
+          # Expose paths globally so compiler linkers can map dependencies
+          echo "LIBCLANG_PATH=$LIBCLANG_DIR" >> $GITHUB_ENV
+          echo "LD_LIBRARY_PATH=$LIBCLANG_DIR:$LD_LIBRARY_PATH" >> $GITHUB_ENV
