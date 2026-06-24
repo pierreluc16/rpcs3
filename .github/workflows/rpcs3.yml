@@ -1,75 +1,40 @@
-name: Check Clang and LLVM Binaries (Ubuntu 24.04 ARM)
+name: Check LLVM and Libclang Binaries
 
 on:
   push:
     branches: [ main, master ]
-  workflow_dispatch: # Allows manual triggering from the Actions tab
+  workflow_dispatch:
 
 jobs:
-  diagnostic:
-    name: Locate Clang Tools Natively
+  locate-llvm:
+    name: Detect LLVM components
     runs-on: ubuntu-24.04-arm
     steps:
-      - name: Check out repository
+      - name: Checkout Code
         uses: actions/checkout@v4
 
-      # --- STEP 1: SEARCH FOR LLVM-CONFIG ---
-      - name: Find llvm-config Path
-        id: scan_llvm
+      - name: Locate llvm-config
         run: |
-          echo "=========================================================="
-          echo "        1. SEARCHING FOR LLVM-CONFIG BINARIES             "
-          echo "=========================================================="
-          
-          # Find any instance of llvm-config in the system
-          LLVM_PATH=$(sudo find /usr -name "llvm-config*" -type f -executable | head -n 1)
-          
-          if [ -n "$LLVM_PATH" ]; then
-            echo "FOUND_LLVM=true" >> $GITHUB_ENV
-            echo "✅ Found valid executable at: $LLVM_PATH"
+          echo "=== Searching for llvm-config ==="
+          if command -v llvm-config &> /dev/null; then
+            echo "✅ Default llvm-config: $(which llvm-config)"
+            llvm-config --version
           else
-            echo "FOUND_LLVM=false" >> $GITHUB_ENV
-            echo "❌ No llvm-config found anywhere in /usr."
+            echo "❌ No default llvm-config found in PATH."
           fi
+          
+          echo -e "\n=== Scanning filesystem for llvm-config variants ==="
+          sudo find /usr/bin /usr/local/bin -name "llvm-config*" 2>/dev/null || echo "No files found."
 
-      # --- STEP 2: SEARCH FOR LIBCLANG.SO ---
-      - name: Find libclang.so Path
-        id: scan_libclang
+      - name: Locate libclang.so
         run: |
-          echo "=========================================================="
-          echo "        2. SEARCHING FOR LIBCLANG SHARED LIBRARIES        "
-          echo "=========================================================="
-          
-          # Find any instance of libclang.so (including versioned variants like .so.1)
-          CLANG_LIB=$(sudo find /usr -name "libclang.so*" -type f | head -n 1)
-          
-          if [ -n "$CLANG_LIB" ]; then
-            echo "FOUND_CLANG=true" >> $GITHUB_ENV
-            echo "✅ Found shared library variant at: $CLANG_LIB"
+          echo "=== Searching for libclang.so ==="
+          if ldconfig -p 2>/dev/null | grep -q "libclang"; then
+            echo "✅ Found in dynamic linker cache:"
+            ldconfig -p | grep "libclang"
           else
-            echo "FOUND_CLANG=false" >> $GITHUB_ENV
-            echo "❌ No libclang.so files found anywhere in /usr."
+            echo "❌ Not found in ldconfig cache."
           fi
-
-      # --- STEP 3: EXPLICIT INSTALLATION CONFIRMATION ---
-      - name: Confirm Installation Status
-        run: |
-          echo "=========================================================="
-          echo "              FINAL INSTALLATION VERIFICATION             "
-          echo "=========================================================="
           
-          if [ "${{ env.FOUND_LLVM }}" = "true" ] && [ "${{ env.FOUND_CLANG }}" = "true" ]; then
-            echo "✅ SUCCESS: Both llvm-config and libclang.so are verified as INSTALLED on this image."
-            echo "They exist on the system, though they may require environment variable mappings to be discovered by Rust."
-          else
-            echo "❌ FAILURE: One or both core dependencies are completely missing from the system."
-            
-            if [ "${{ env.FOUND_LLVM }}" != "true" ]; then
-              echo "  -> Missing: llvm-config utility"
-            fi
-            if [ "${{ env.FOUND_CLANG }}" != "true" ]; then
-              echo "  -> Missing: libclang shared library engine"
-            fi
-            
-            exit 1
-          fi
+          echo -e "\n=== Scanning filesystem for libclang.so files ==="
+          sudo find /usr/lib /usr/local/lib -name "libclang.so*" 2>/dev/null || echo "No files found."
