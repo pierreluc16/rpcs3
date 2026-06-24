@@ -9,7 +9,7 @@ jobs:
   strict-test:
     runs-on: ubuntu-24.04-arm
     
-    # Precise LLVM 18 directory mappings for Ubuntu 24.04 ARM64
+    # Target the explicit LLVM-18 directories
     env:
       LIBCLANG_PATH: /usr/lib/llvm-18/lib
       LLVM_CONFIG_PATH: /usr/lib/llvm-18/bin/llvm-config
@@ -20,6 +20,14 @@ jobs:
 
       - name: Install Rust Toolchain
         uses: dtolnay/rust-toolchain@stable
+
+      # --- THE CRITICAL FIX: Link the unversioned library ---
+      - name: Fix Missing libclang.so Symlink Natively
+        run: |
+          if [ ! -f /usr/lib/llvm-18/lib/libclang.so ] && [ -f /usr/lib/llvm-18/lib/libclang.so.1 ]; then
+            echo "Creating missing symlink for clang-sys compatibility..."
+            sudo ln -s /usr/lib/llvm-18/lib/libclang.so.1 /usr/lib/llvm-18/lib/libclang.so
+          fi
 
       # --- CONSTRUCT REAL CARGO EXPERIMENT ---
       - name: Generate Dummy Project to Force Clang-Sys Probing
@@ -48,28 +56,10 @@ jobs:
           
           if [ "${{ steps.build_execution.outcome }}" = "success" ]; then
             echo "✅ BOTH ERRORS RESOLVED NATIVELY!"
-            echo "The image tools were successfully mapped using explicit LLVM 18 paths."
+            echo "The compilation succeeded after creating the local symlink override."
             echo "You do not need to install apt packages anymore."
           else
             echo "❌ CRITICAL ERRORS ENCOUNTERED ON NATIVE IMAGE!"
-            echo "Let's inspect what is missing below:"
-            echo ""
-            
-            # Sub-test 1: Check for error 1 (llvm-config missing)
-            if [ -f /usr/lib/llvm-18/bin/llvm-config ]; then
-              echo "  -> Tooling: LLVM 18 'llvm-config' is present."
-            else
-              echo "  -> [FIX REQUIRED]: LLVM 18 'llvm-config' is missing at the targeted path."
-            fi
-            
-            # Sub-test 2: Check for error 2 (libclang.so missing)
-            if [ -f /usr/lib/llvm-18/lib/libclang.so ] || [ -f /usr/lib/llvm-18/lib/libclang.so.1 ]; then
-              echo "  -> Library: 'libclang.so' variant found in LLVM 18 directory."
-            else
-              echo "  -> [FIX REQUIRED]: 'libclang.so' is missing from the LLVM 18 directory."
-            fi
-            
-            echo ""
-            echo "Action item: If this failed, look at the build log above to see the new crash reason."
+            echo "The build still failed. Inspect the Cargo compilation logs above."
             exit 1
           fi
