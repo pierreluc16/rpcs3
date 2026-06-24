@@ -1,53 +1,71 @@
-name: Test Specific Clang Errors on Ubuntu 24.04 ARM
+name: Strict Verification of Clang Errors on Ubuntu 24.04 ARM
 
 on:
   push:
     branches: [ main ]
-  workflow_dispatch: # Allows you to trigger the test manually from the Actions tab
+  workflow_dispatch: # Allows you to manually trigger this anytime from the GitHub UI
 
 jobs:
-  test-errors-arm:
-    # Target the official GitHub Actions Ubuntu 24.04 ARM64 runner
+  strict-test:
     runs-on: ubuntu-24.04-arm
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      # --- TEST 1: Check for llvm-config presence ---
-      - name: Test Error 1 (llvm-config missing)
-        id: test_llvm_config
+      - name: Install Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      # --- CONSTRUCT REAL CARGO EXPERIMENT ---
+      - name: Generate Dummy Project to Force Clang-Sys Probing
+        run: |
+          cargo new arm-clang-tester --bin
+          cd arm-clang-tester
+          # Add the exact crate and version causing your original error
+          echo 'clang-sys = "=1.8.1"' >> Cargo.toml
+          # Force dependency inclusion in code to ensure it compiles during build
+          echo 'fn main() { unsafe { clang_sys::clang_createIndex(0, 0); } }' > src/main.rs
+
+      # --- THE ULTIMATE COMPILATION TEST ---
+      - name: Execute Cargo Build (Isolating the Errors)
+        id: build_execution
         continue-on-error: true
         run: |
-          echo "Checking for the presence of llvm-config on ARM..."
-          llvm-config --prefix
+          cd arm-clang-tester
+          cargo build --verbose
 
-      # --- TEST 2: Check for libclang.so presence ---
-      - name: Test Error 2 (libclang.so missing)
-        id: test_libclang
-        continue-on-error: true
+      # --- FINAL MULTI-ERROR REPORTING SUITE ---
+      - name: Evaluate Error States
         run: |
-          echo "Searching for libclang shared libraries on ARM..."
-          # Attempts to find libclang in standard system paths
-          ldconfig -p | grep libclang
-
-      # --- TEST SUMMARY REPORT ---
-      - name: Evaluate Error Presence
-        run: |
-          echo "=== UBUNTU 24.04 ARM TEST RESULTS ==="
+          echo "=========================================================="
+          echo "          UBUNTU 24.04 ARM REALITY-CHECK RESULTS          "
+          echo "=========================================================="
           
-          if [ "${{ steps.test_llvm_config.outcome }}" = "success" ]; then
-            echo "✅ ERROR 1 RESOLVED: 'llvm-config' is present by default on ARM."
-          else
-            echo "❌ ERROR 1 STILL OCCURRING: 'llvm-config' is missing (No such file or directory)."
-          fi
-
-          if [ "${{ steps.test_libclang.outcome }}" = "success" ]; then
-            echo "✅ ERROR 2 RESOLVED: 'libclang.so' is detected on the ARM system."
-          else
-            echo "❌ ERROR 2 STILL OCCURRING: 'libclang.so' is missing from ARM system paths."
-          fi
+          if [ "${{ Azure_or_Github_runner_environment }}" != "" ]; then echo ""; fi # Spacer
           
-          # Force the job to fail if either error is still active
-          if [ "${{ steps.test_llvm_config.outcome }}" = "failure" ] || [ "${{ steps.test_libclang.outcome }}" = "failure" ]; then
+          if [ "${{ steps.build_execution.outcome }}" = "success" ]; then
+            echo "✅ BOTH ERRORS RESOLVED!"
+            echo "The native ubuntu-24.04-arm image now possesses valid Clang binaries."
+            echo "You do not need to install apt packages anymore."
+          else
+            echo "❌ CRITICAL ERRORS ENCOUNTERED ON NATIVE IMAGE!"
+            echo "Let's inspect what is missing below:"
+            echo ""
+            
+            # Sub-test 1: Check for error 1 (llvm-config missing)
+            if command -v llvm-config &> /dev/null; then
+              echo "  -> Tooling: 'llvm-config' is present. (Error 1 passed)"
+            else
+              echo "  -> [FIX REQUIRED]: 'llvm-config' is missing! This caused your first error."
+            fi
+            
+            # Sub-test 2: Check for error 2 (libclang.so missing)
+            if ldconfig -p 2>/dev/null | grep -q "libclang"; then
+              echo "  -> Library: 'libclang.so' was detected in paths. (Error 2 passed)"
+            else
+              echo "  -> [FIX REQUIRED]: 'libclang.so' is missing! This caused your unwrap() crash."
+            fi
+            
+            echo ""
+            echo "Action item: Keep using 'sudo apt-get install -y clang libclang-dev llvm-dev' in your setup."
             exit 1
           fi
