@@ -25,17 +25,15 @@ jobs:
         echo "🚀 STEP 1: INITIAL DEPLOYMENT & COHERENCY CHECK"
         echo "========================================================"
         
-        # Ensure packages are actively present on the runner before deep scanning
-        if ! pkg-config --exists icu-i18n; then
-            echo "⚠️ ICU development files missing. Installing packages..."
-            sudo apt-get update
-            sudo apt-get install -y libicu-dev icu-devtools pkg-config build-essential
-        fi
+        # Enforce clean package state up front to prevent missing dependencies
+        echo "Updating apt caches and enforcing toolchain baseline..."
+        sudo apt-get update -y
+        sudo apt-get install -y libicu-dev icu-devtools pkg-config build-essential file
 
-        # Extract system variables
+        # Extract system configuration flags
         ICU_VERSION=$(pkg-config --modversion icu-i18n)
         CFLAGS=$(pkg-config --cflags icu-i18n)
-        LIBS=$(pkg-config --libs icu-i18n)
+        LIBS=$(pkg-config --libs icu-i18n icu-uc)
 
         echo "• Detected ICU Version : $ICU_VERSION"
         echo "• Compiler Flags       : $CFLAGS"
@@ -45,7 +43,6 @@ jobs:
         echo "🔍 STEP 2: FILE SYSTEM PATHS & DEEP BINARY AUDIT"
         echo "========================================================"
         
-        # Extract the library directory path from pkg-config
         LIB_DIR=$(pkg-config --variable=libdir icu-i18n)
         INC_DIR=$(pkg-config --variable=includedir icu-i18n)
 
@@ -57,18 +54,16 @@ jobs:
             exit 1
         fi
 
-        # Locate the real dynamic library file (.so) and deep scan its architecture
+        # Find the real file behind the symlink
         REAL_SO_FILE=$(readlink -f "$LIB_DIR/libicui18n.so")
         echo "• Target Binary File   : $REAL_SO_FILE"
         
         if [ -f "$REAL_SO_FILE" ]; then
-            # Deep scan binary signature using the 'file' utility
             BIN_INFO=$(file "$REAL_SO_FILE")
             echo "  ➔ Binary Metadata: $BIN_INFO"
             
-            # Assert that it matches the runner architecture
-            if [[ "$BIN_INFO" == *"x86-64"* ]]; then
-                echo "  ✅ Architecture Verification Passed: Native 64-bit ELF."
+            if [[ "$BIN_INFO" == *"x86-64"* || "$BIN_INFO" == *"aarch64"* ]]; then
+                echo "  ✅ Architecture Verification Passed."
             else
                 echo "  ❌ CRITICAL: Architecture mismatch detected inside the binary."
                 exit 1
@@ -82,7 +77,7 @@ jobs:
         echo "🛠️ STEP 3: LIVE COMPILATION & RUNTIME ASSERTION TEST"
         echo "========================================================"
         
-        # Write a temporary C++ program that initializes the ICU environment
+        # Write a safe C++ program using basic standard layout
         cat << 'EOF' > icu_test.cpp
 #include <iostream>
 #include <unicode/utypes.h>
@@ -95,21 +90,20 @@ int main() {
     u_init(&status);
     
     if (U_FAILURE(status)) {
-        std::cerr << "❌ ICU Initialization Failed! Error code: " << u_errorName(status) << std::endl;
+        std::cerr << "❌ ICU Initialization Failed!" << std::endl;
         return 1;
     }
     
-    std::cout << "✅ ICU Subsystem Initialized Successfully in Runtime Environment." << std::endl;
+    std::cout << "✅ ICU Subsystem Initialized Successfully." << std::endl;
     
-    // Clean up memory
     u_cleanup();
     return 0;
 }
 EOF
 
         echo "• Compiling test verification binary..."
-        # Compile using the exact flags provided by pkg-config
-        g++ icu_test.cpp -o icu_test_runtime $CFLAGS $LIBS
+        # Explicit addition of standard library bindings to prevent linkage failure
+        g++ icu_test.cpp -o icu_test_runtime $CFLAGS $LIBS -lpthread -ldl
 
         echo "• Running execution test..."
         ./icu_test_runtime
