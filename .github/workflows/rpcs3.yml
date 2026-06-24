@@ -10,16 +10,16 @@ on:
 jobs:
   verify-error:
     runs-on: ubuntu-24.04-arm
+    # Uses an isolated container to run Cargo without installing Rust via a setup step
+    container:
+      image: rust:1.80-slim
 
     steps:
     - name: Checkout Code
       uses: actions/checkout@v4
       with:
-        # Prevents the Cargo.toml missing error by structuring the code inside the rpcs3 directory
-        path: rpcs3
-
-    - name: Set up Rust Toolchain
-      uses: dtolnay/rust-toolchain@stable
+        # Cleared path parameter to fix the nested /rpcs3/rpcs3 Cargo.toml error
+        path: ''
 
     - name: Diagnostic System Sweep
       run: |
@@ -31,6 +31,5 @@ jobs:
         find /usr/lib /usr/local/lib /lib -name "libclang.so*" 2>/dev/null || true
 
     - name: Execute Cargo Check
-      working-directory: rpcs3
-      # Raw execution with no installation and no overrides to check if the errors still occur
+      # Runs directly in the root directory where the codebase was checked out
       run: cargo check -p clang-sys --verbose
