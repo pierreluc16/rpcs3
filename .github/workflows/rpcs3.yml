@@ -1,4 +1,4 @@
-name: Ubuntu 24.04 ICU 74 Dev Environment Validation
+name: Ubuntu 24.04 Core ICU Dev Environment Verification
 
 on:
   push:
@@ -8,98 +8,97 @@ on:
   workflow_dispatch:
 
 jobs:
-  audit-and-setup-icu24:
-    # Explicitly targeted for Ubuntu 24.04 LTS environments
+  verify-and-configure-icu:
+    name: Validate and Build Toolchain Environment
     runs-on: ubuntu-24.04
 
     steps:
-    - name: Checkout Code
+    - name: Checkout Code Repository
       uses: actions/checkout@v4
 
-    - name: Multi-Method ICU 74 Audit and Remediation
+    - name: Execute Multi-Method ICU Verification
       shell: bash
       run: |
-        run_icu_audit() {
-            DPKG_VERSION="Not Found"
-            PKG_CONFIG_VERSION="Not Found"
-            ICUINFO_VERSION="Not Found"
-            FAILED_METHODS=0
+        set -euo pipefail
 
-            echo "---------------------------------------------------------"
-            echo "🔍 INSPECTING UBUNTU 24.04 COMPILER LAYOUT..."
-            echo "---------------------------------------------------------"
+        # Isolated internal verification function
+        audit_icu_toolchain() {
+            local failed_checks=0
+            
+            echo "--------------------------------------------------------"
+            echo "📊 RUNNING SYSTEM IDENTIFICATION & PATH CHECKS..."
+            echo "--------------------------------------------------------"
 
-            # 1. System Package Tree Verification
+            # METHOD 1: Query System Package Tree State
             if dpkg -s libicu-dev >/dev/null 2>&1; then
-                DPKG_VERSION=$(dpkg-query -W -f='${Version}' libicu-dev)
-                echo "✅ Method 1 (dpkg)       : Found Package ($DPKG_VERSION)"
+                CURRENT_DPKG_VERSION=$(dpkg-query -W -f='${Version}' libicu-dev)
+                echo "✅ Method 1: dpkg Package Record Found -> Version: $CURRENT_DPKG_VERSION"
             else
-                echo "❌ Method 1 (dpkg)       : Package 'libicu-dev' is missing"
-                FAILED_METHODS=$((FAILED_METHODS + 1))
+                echo "❌ Method 1: dpkg Package Record Missing"
+                failed_checks=$((failed_checks + 1))
             fi
 
-            # 2. Modern Upstream-Standard Toolchain Verification (pkg-config)
+            # METHOD 2: Check Modern Compiler Mapping Flags via pkg-config
             if pkg-config --exists icu-i18n >/dev/null 2>&1; then
-                PKG_CONFIG_VERSION=$(pkg-config --modversion icu-i18n)
-                echo "✅ Method 2 (pkg-config) : Found Config Flags ($PKG_CONFIG_VERSION)"
+                CURRENT_PKG_VERSION=$(pkg-config --modversion icu-i18n)
+                echo "✅ Method 2: pkg-config Manifest Found  -> Version: $CURRENT_PKG_VERSION"
             else
-                echo "❌ Method 2 (pkg-config) : Metadata missing (.pc path unmapped)"
-                FAILED_METHODS=$((FAILED_METHODS + 1))
+                echo "❌ Method 2: pkg-config Manifest Missing (.pc files unmapped)"
+                failed_checks=$((failed_checks + 1))
             fi
 
-            # 3. Native Engine Execution Tool Verification (icuinfo)
+            # METHOD 3: Query Core Native ICU Engine Binaries directly
             if command -v icuinfo >/dev/null 2>&1; then
-                ICUINFO_VERSION=$(icuinfo | grep -i "International Components for Unicode" | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?')
-                echo "✅ Method 3 (icuinfo)    : Found Operational Tool ($ICUINFO_VERSION)"
+                CURRENT_BIN_VERSION=$(icuinfo | grep -i "International Components for Unicode" | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?')
+                echo "✅ Method 3: Engine Binary Execution OK -> Version: $CURRENT_BIN_VERSION"
             else
-                echo "❌ Method 3 (icuinfo)    : 'icuinfo' executable not found in PATH"
-                FAILED_METHODS=$((FAILED_METHODS + 1))
+                echo "❌ Method 3: Engine Binary 'icuinfo' Missing from PATH"
+                failed_checks=$((failed_checks + 1))
             fi
 
-            return $FAILED_METHODS
+            return $failed_checks
         }
 
-        echo "========================================================="
-        echo "🚀 RUNNING VALIDATION ON UBUNTU 24.04 TARGET MACHINE"
-        echo "========================================================="
-        
-        run_icu_audit
-        AUDIT_RESULT=$?
+        # Initialize environment control variables
+        CURRENT_DPKG_VERSION="Unknown"
+        CURRENT_PKG_VERSION="Unknown"
+        CURRENT_BIN_VERSION="Unknown"
 
-        # Fix the system if the baseline package components are not present
-        if [ $AUDIT_RESULT -gt 0 ]; then
-            echo -e "\n⚠️ WARNING: Broken links or missing components found on Ubuntu 24.04."
-            echo "🔧 Triggering automatic APT tracking update & restoration..."
+        echo "========================================================"
+        echo "🚀 TARGET OS PLATFORM: UBUNTU 24.04 (NOBLE NUMBAT)"
+        echo "========================================================"
+        
+        # Launch Step 1 initial assessment
+        if ! audit_icu_toolchain; then
+            echo -e "\n⚠️ WARNING: Deficiencies or incomplete tools detected on the host."
+            echo "🔧 Launching Ubuntu 24.04 Automated Recovery Layer..."
             
             sudo apt-get update
-            # Enforce explicit layout mapping alongside the ICU dev headers
             sudo apt-get install -y libicu-dev icu-devtools pkg-config
             
-            echo -e "\n🔄 Executing system sanity audit loop..."
-            run_icu_audit
-            FINAL_RESULT=$?
-            
-            if [ $FINAL_RESULT -gt 0 ]; then
-                echo -e "\n❌ CRITICAL: Environment remediation failed on target OS image."
+            echo -e "\n🔄 Executing post-remediation system validation cycle..."
+            if ! audit_icu_toolchain; then
+                echo -e "\n❌ CRITICAL ERROR: Environment remediation failed. Build step aborted."
                 exit 1
             fi
         fi
 
-        # Assertive version sanity check to ensure compatibility with modern configurations
-        if [[ "$PKG_CONFIG_VERSION" != 74.* ]]; then
-            echo -e "\n⚠️ OS NOTICE: Ubuntu 24.04 expects ICU version 74.x natively."
-            echo "   Detected cross-linked or customized local build configuration: $PKG_CONFIG_VERSION"
+        # Assertive Warning for Ubuntu 24.04 expected standards
+        if [[ "$CURRENT_PKG_VERSION" != 74.* ]]; then
+            echo -e "\n⚠️ OS NOTICE: Ubuntu 24.04 utilizes ICU 74.x natively."
+            echo "   Detected customized or offset environment version: $CURRENT_PKG_VERSION"
         fi
 
-        echo -e "\n========================================================="
-        echo "🎉 INT-COMPONENTS DEPLOYED SUCCESSFULLY ON UBUNTU 24.04"
-        echo "========================================================="
-        echo "• Fully Resolved System Target Version: $PKG_CONFIG_VERSION"
+        echo -e "\n========================================================"
+        echo "🎉 SUCCESS: ENVIRONMENT VERIFIED READY FOR PRODUCTION BUILD"
+        echo "========================================================"
+        echo "• Fully Resolved System Target Version: $CURRENT_PKG_VERSION"
         
-        # Share target environmental context variable cleanly to subsequent runner hooks
-        echo "ICU_VER_VERIFIED=$PKG_CONFIG_VERSION" >> $GITHUB_ENV
-        echo "========================================================="
+        # Safely pass variables downstream via GitHub Environment contexts
+        echo "ICU_VER_VERIFIED=$CURRENT_PKG_VERSION" >> "$GITHUB_ENV"
+        echo "========================================================"
 
-    - name: Verify Downstream Access
+    - name: Downstream Integration Check
       run: |
-        echo "Target environment successfully recognized ICU Engine Version: ${{ env.ICU_VER_VERIFIED }}"
+        echo "Pipeline context successfully initialized."
+        echo "Target compiling sequence tracking version: ${{ env.ICU_VER_VERIFIED }}"
