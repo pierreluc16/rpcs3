@@ -64,7 +64,9 @@ jobs:
                         RelativePath = $file.FullName.Replace($llvmPath, "")
                     }
                 }
-            } catch {}
+            } catch {
+                # Safe skip for system lock blocks
+            }
         }
 
         if ($totalFiles -eq 0) {
@@ -75,7 +77,7 @@ jobs:
         $arm64Percentage = [Math]::Round(($arm64Count / $totalFiles) * 100, 2)
         $emulatedPercentage = [Math]::Round(($emulatedCount / $totalFiles) * 100, 2)
 
-        # 1. Output to standard runner logs
+        # 1. Standard Runner Log Terminal Strings
         Write-Host "`n=========================================================="
         Write-Host "📊 LLVM COMPOSITION SUMMARY REPORT"
         Write-Host "=========================================================="
@@ -89,7 +91,8 @@ jobs:
             $emulatedList | Format-Table -Property FileName, Architecture, RelativePath -AutoSize
         }
 
-        # 2. Inject rich formatting directly into the GitHub UI Summary page
+        # 2. Corrected Target Summary Generation Block
+        # Uses explicit $env:GITHUB_STEP_SUMMARY to bypass local null evaluations
         Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "### 📊 LLVM Binary Composition Audit"
         Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "| Metric | Value |"
         Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "| :--- | :--- |"
@@ -100,8 +103,10 @@ jobs:
             Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "### ⚠️ Breakdown of Emulated Components"
             Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "| File Name | Detected Architecture | Relative Path |"
             Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "| :--- | :--- | :--- |"
+            
+            # Clean string parsing without template token collision risks
             foreach ($item in $emulatedList) {
-                Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "| \`${{ $item.FileName }}\` | ${{ $item.Architecture }} | \`${{ $item.RelativePath }}\` |"
+                Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "| `$($item.FileName) | $($item.Architecture) | `$($item.RelativePath) |"
             }
         } else {
             Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "### ✅ Purity Check Passed"
