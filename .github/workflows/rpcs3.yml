@@ -15,37 +15,61 @@ jobs:
 
       # --- STEP 1: SEARCH FOR LLVM-CONFIG ---
       - name: Find llvm-config Path
+        id: scan_llvm
         run: |
           echo "=========================================================="
           echo "        1. SEARCHING FOR LLVM-CONFIG BINARIES             "
           echo "=========================================================="
           
-          echo "Checking default system PATH..."
-          if command -v llvm-config &> /dev/null; then
-            echo "✅ Global binary found at: $(which llvm-config)"
-          else
-            echo "❌ 'llvm-config' is NOT available in the default system PATH."
-          fi
+          # Find any instance of llvm-config in the system
+          LLVM_PATH=$(sudo find /usr -name "llvm-config*" -type f -executable | head -n 1)
           
-          echo ""
-          echo "Scanning filesystem for versioned LLVM tools..."
-          sudo find /usr -name "llvm-config*" 2>/dev/null || echo "No llvm-config variants found."
+          if [ -n "$LLVM_PATH" ]; then
+            echo "FOUND_LLVM=true" >> $GITHUB_ENV
+            echo "✅ Found valid executable at: $LLVM_PATH"
+          else
+            echo "FOUND_LLVM=false" >> $GITHUB_ENV
+            echo "❌ No llvm-config found anywhere in /usr."
+          fi
 
       # --- STEP 2: SEARCH FOR LIBCLANG.SO ---
       - name: Find libclang.so Path
+        id: scan_libclang
         run: |
           echo "=========================================================="
           echo "        2. SEARCHING FOR LIBCLANG SHARED LIBRARIES        "
           echo "=========================================================="
           
-          echo "Checking system dynamic linker registry (ldconfig)..."
-          if ldconfig -p 2>/dev/null | grep -q "libclang"; then
-            echo "✅ Shared libraries registered in cache:"
-            ldconfig -p | grep libclang
-          else
-            echo "❌ No libclang references tracked in ldconfig cache."
-          fi
+          # Find any instance of libclang.so (including versioned variants like .so.1)
+          CLANG_LIB=$(sudo find /usr -name "libclang.so*" -type f | head -n 1)
           
-          echo ""
-          echo "Scanning filesystem for exact or versioned libclang files..."
-          sudo find /usr -name "libclang.so*" 2>/dev/null || echo "No libclang.so files found."
+          if [ -n "$CLANG_LIB" ]; then
+            echo "FOUND_CLANG=true" >> $GITHUB_ENV
+            echo "✅ Found shared library variant at: $CLANG_LIB"
+          else
+            echo "FOUND_CLANG=false" >> $GITHUB_ENV
+            echo "❌ No libclang.so files found anywhere in /usr."
+          fi
+
+      # --- STEP 3: EXPLICIT INSTALLATION CONFIRMATION ---
+      - name: Confirm Installation Status
+        run: |
+          echo "=========================================================="
+          echo "              FINAL INSTALLATION VERIFICATION             "
+          echo "=========================================================="
+          
+          if [ "${{ env.FOUND_LLVM }}" = "true" ] && [ "${{ env.FOUND_CLANG }}" = "true" ]; then
+            echo "✅ SUCCESS: Both llvm-config and libclang.so are verified as INSTALLED on this image."
+            echo "They exist on the system, though they may require environment variable mappings to be discovered by Rust."
+          else
+            echo "❌ FAILURE: One or both core dependencies are completely missing from the system."
+            
+            if [ "${{ env.FOUND_LLVM }}" != "true" ]; then
+              echo "  -> Missing: llvm-config utility"
+            fi
+            if [ "${{ env.FOUND_CLANG }}" != "true" ]; then
+              echo "  -> Missing: libclang shared library engine"
+            fi
+            
+            exit 1
+          fi
