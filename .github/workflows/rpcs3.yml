@@ -8,6 +8,12 @@ on:
 jobs:
   strict-test:
     runs-on: ubuntu-24.04-arm
+    
+    # Global environment variables to fix the clang-sys mapping natively
+    env:
+      LIBCLANG_PATH: /usr/lib/aarch64-linux-gnu
+      LLVM_CONFIG_PATH: /usr/bin/llvm-config
+
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -41,8 +47,8 @@ jobs:
           echo "=========================================================="
           
           if [ "${{ steps.build_execution.outcome }}" = "success" ]; then
-            echo "✅ BOTH ERRORS RESOLVED!"
-            echo "The native ubuntu-24.04-arm image now possesses valid Clang binaries."
+            echo "✅ BOTH ERRORS RESOLVED NATIVELY!"
+            echo "The image tools were successfully mapped using environment variables."
             echo "You do not need to install apt packages anymore."
           else
             echo "❌ CRITICAL ERRORS ENCOUNTERED ON NATIVE IMAGE!"
@@ -64,6 +70,6 @@ jobs:
             fi
             
             echo ""
-            echo "Action item: Keep using 'sudo apt-get install -y clang libclang-dev llvm-dev' in your setup."
+            echo "Action item: If this failed, check if the paths /usr/lib/aarch64-linux-gnu or /usr/bin/llvm-config changed."
             exit 1
           fi
