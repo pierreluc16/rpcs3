@@ -1,4 +1,4 @@
-name: Test LLVM LoadLibraryExW Error and Fix
+name: LLVM Installation ARM Percentage Scan
 
 on:
   push:
@@ -6,77 +6,88 @@ on:
   workflow_dispatch:
 
 jobs:
-  test-bug-and-fix:
+  calculate-arm-percentage:
     runs-on: windows-11-arm
 
     steps:
     - name: Checkout Repository
       uses: actions/checkout@v4
 
-    # =========================================================================
-    # PHASE 1: TEST PRE-INSTALLED LLVM (EXPECT FAILURE)
-    # =========================================================================
-    - name: 1. Test Pre-installed LLVM (Expect LoadLibrary Failure)
+    - name: Run Deep Binary Architecture Scan
       shell: pwsh
-      continue-on-error: true # Continues workflow when the bug triggers
-      id: test_preinstalled
       run: |
-        $dllPath = "C:\Program Files\LLVM\bin\libclang.dll"
-        Write-Host "Targeting Pre-installed Path: $dllPath"
+        $llvmPath = "C:\Program Files\LLVM"
         
-        # Define native Windows kernel32 LoadLibraryExW method signature via P/Invoke
-        $signature = '[DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)] public static extern IntPtr LoadLibraryExW(string lpLibFileName, IntPtr hFile, uint dwFlags);'
-        $type = Add-Type -MemberDefinition $signature -Name "Kernel32" -Namespace "Win32" -PassThru
-
-        Write-Host "Invoking native ARM64 LoadLibraryExW on the emulated x86_64 DLL..."
-        # 0x00000008 = LOAD_WITH_ALTERED_SEARCH_PATH (Matches how rust bindgen loads libraries)
-        $handle = $type::LoadLibraryExW($dllPath, [IntPtr]::Zero, 0x00000008)
-
-        if ($handle -eq [IntPtr]::Zero) {
-            $errorCode = [System.Runtime.InteropServices.Marshal]::GetLastWin32Error()
-            Write-Host "❌ BUG REPRODUCED: LoadLibraryExW failed as reported in actions/runner-images#14085."
-            Write-Host "System Win32 Error Code: $errorCode (Error 193 = ERROR_BAD_EXE_FORMAT)"
-        } else {
-            Write-Host "⚠️ Unexpected Success: The pre-installed library loaded without issue."
-            $freeSignature = '[DllImport("kernel32.dll", SetLastError = true)] public static extern bool FreeLibrary(IntPtr hModule);'
-            $freeType = Add-Type -MemberDefinition $freeSignature -Name "Kernel32Free" -Namespace "Win32" -PassThru
-            $freeType::FreeLibrary($handle) | Out-Null
-        }
-
-    # =========================================================================
-    # PHASE 2: APPLY FIX (INSTALL NATIVE LLVM ARM64)
-    # =========================================================================
-    - name: 2. Apply Fix (Install Native LLVM ARM64)
-      uses: KyleMayes/install-llvm-action@v2
-      with:
-        version: "20.1.0"
-        arch: arm64
-
-    # =========================================================================
-    # PHASE 3: TEST FIX (EXPECT SUCCESS)
-    # =========================================================================
-    - name: 3. Test Fixed LLVM Environment (Expect LoadLibrary Success)
-      shell: pwsh
-      run: |
-        $fixedDllPath = "$env:LLVM_PATH\bin\libclang.dll"
-        Write-Host "Targeting Injected Native Path: $fixedDllPath"
-
-        $signature = '[DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)] public static extern IntPtr LoadLibraryExW(string lpLibFileName, IntPtr hFile, uint dwFlags);'
-        $type = Add-Type -MemberDefinition $signature -Name "Kernel32Fixed" -Namespace "Win32" -PassThru
-
-        Write-Host "Invoking native ARM64 LoadLibraryExW on the newly installed Native ARM64 DLL..."
-        $handle = $type::LoadLibraryExW($fixedDllPath, [IntPtr]::Zero, 0x00000008)
-
-        if ($handle -eq [IntPtr]::Zero) {
-            $errorCode = [System.Runtime.InteropServices.Marshal]::GetLastWin32Error()
-            Write-Error "❌ FIX FAILED: LoadLibraryExW still dropped a Win32 Error: $errorCode"
+        if (-not (Test-Path $llvmPath)) {
+            Write-Error "LLVM folder not found at default location: $llvmPath"
             exit 1
-        } else {
-            Write-Host "✅ FIX VERIFIED SUCCESSFULLY!"
-            Write-Host "The native ARM64 libclang.dll was safely loaded into memory space."
-            Write-Host "Valid Memory Pointer Address: $handle"
-            
-            $freeSignature = '[DllImport("kernel32.dll", SetLastError = true)] public static extern bool FreeLibrary(IntPtr hModule);'
-            $freeType = Add-Type -MemberDefinition $freeSignature -Name "Kernel32FreeFixed" -Namespace "Win32" -PassThru
-            $freeType::FreeLibrary($handle) | Out-Null
         }
+        
+        Write-Host "🔍 Initiating recursive binary analysis on: $llvmPath"
+        $files = Get-ChildItem -Path $llvmPath -Recurse -Include *.exe, *.dll
+        
+        $arm64Count = 0
+        $x86_64Count = 0
+        $otherCount = 0
+        $totalFiles = 0
+
+        foreach ($file in $files) {
+            try {
+                $stream = New-Object System.IO.FileStream($file.FullName, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::Read)
+                $reader = New-Object System.IO.BinaryReader($stream)
+                
+                # Check DOS Header magic number (MZ)
+                $mz = $reader.ReadBytes(2)
+                if ($mz[0] -ne 0x4D -or $mz[1] -ne 0x5A) {
+                    $reader.Close(); $stream.Close(); continue
+                }
+                
+                # Seek to PE header offset (stored at 0x3C)
+                $stream.Seek(0x3C, [System.IO.SeekOrigin]::Begin)
+                $peOffset = $reader.ReadUInt32()
+                
+                # Seek to COFF File Header Machine field (PE offset + 4 bytes of PE signature)
+                $stream.Seek(($peOffset + 4), [System.IO.SeekOrigin]::Begin)
+                $machineType = $reader.ReadUInt16()
+                
+                $reader.Close()
+                $stream.Close()
+                
+                $totalFiles++
+                
+                # Identify Machine Type Architectures
+                # 0xAA64 = IMAGE_FILE_MACHINE_ARM64
+                # 0x8664 = IMAGE_FILE_MACHINE_AMD64 (x86_64)
+                if ($machineType -eq 0xAA64) {
+                    $arm64Count++
+                } elseif ($machineType -eq 0x8664) {
+                    $x86_64Count++
+                } else {
+                    $otherCount++
+                }
+            }
+            catch {
+                # Skip files locked by processes or lacking execution privileges
+            }
+        }
+
+        if ($totalFiles -eq 0) {
+            Write-Error "No valid executable or dynamic library targets found to scan."
+            exit 1
+        }
+
+        # Percentage Math Calculation
+        $arm64Percentage = [Math]::Round(($arm64Count / $totalFiles) * 100, 2)
+        $emulatedPercentage = [Math]::Round(($x86_64Count / $totalFiles) * 100, 2)
+
+        Write-Host "`n================================================"
+        Write-Host "📊 LLVM BINARY COMPOSITION AUDIT REPORT"
+        Write-Host "================================================"
+        Write-Host "• Native ARM64 Binaries  : $arm64Count files"
+        Write-Host "• Emulated x86_64 Binaries: $x86_64Count files"
+        Write-Host "• Other Architectures    : $otherCount files"
+        Write-Host "• Total Analyzed Binaries: $totalFiles files"
+        Write-Host "------------------------------------------------"
+        Write-Host "➔ NATIVE ARM64 DISTRIBUTION : $arm64Percentage %"
+        Write-Host "➔ EMULATED DISTRIBUTION     : $emulatedPercentage %"
+        Write-Host "================================================`n"
