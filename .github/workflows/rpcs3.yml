@@ -9,7 +9,7 @@ on:
 
 jobs:
   run-test-script:
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-24.04-arm64
 
     steps:
       - name: Step 1 - Checkout repository code
@@ -29,8 +29,8 @@ jobs:
       - name: Step 3 - Verify LLVM Config Warning
         run: |
           echo "=== Verifying Error 1 (llvm-config warning) ==="
-          # Use grep -E to catch critical LLVM missing binary signatures flexibly
-          if grep -q "could not execute llvm-config" manual_build.log && grep -qE "(No such file|os error 2)" manual_build.log; then
+          # Use grep -E to loosely catch 'could not execute' alongside 'llvm-config' to bypass cargo:warning formatting and backticks
+          if grep -qE "could not execute.*llvm-config|llvm-config.*could not execute" manual_build.log && grep -qE "(No such file|os error 2|program not found)" manual_build.log; then
             echo "✅ SUCCESS: Missing llvm-config warning detected."
           else
             echo "❌ FAILURE: Expected llvm-config warning not found."
