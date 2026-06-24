@@ -1,140 +1,110 @@
-name: LLVM Audit - ARM vs Intel Percentage Scan
+name: Windows 11 ARM LLVM Native Percentage Audit
 
 on:
   push:
     branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
   workflow_dispatch:
 
 jobs:
-  audit-llvm:
+  calculate-native-ratio:
     runs-on: windows-11-arm
-
+    
     steps:
-    - name: Checkout Repository
+    - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Scan LLVM Installation (ARM vs Intel)
+    - name: Scan LLVM Folder Composition
       shell: pwsh
       run: |
         $llvmPath = "C:\Program Files\LLVM"
         
         if (-not (Test-Path $llvmPath)) {
-            Write-Error "The LLVM installation directory was not found at: $llvmPath"
+            Write-Error "LLVM installation directory was not found at: $llvmPath"
             exit 1
         }
         
-        Write-Host "🔍 Initiating deep architectural scanning on components inside: $llvmPath"
+        Write-Host "🔍 Deep scanning directory mapping to analyze binary composition..."
         $files = Get-ChildItem -Path $llvmPath -Recurse -Include *.exe, *.dll
         
-        $arm64Count  = 0
-        $intel64Count = 0  # x86_64 / AMD64
-        $intel32Count = 0  # x86 / i386
-        $otherCount   = 0
-        $totalFiles   = 0
+        $arm64Count = 0
+        $emulatedCount = 0
+        $failedReads = 0
+        $emulatedList = @()
         
-        $componentList = @()
-
         foreach ($file in $files) {
             try {
                 $stream = New-Object System.IO.FileStream($file.FullName, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::Read)
                 $reader = New-Object System.IO.BinaryReader($stream)
                 
-                # Check DOS Header magic number (MZ)
+                # Check DOS signature (MZ)
                 $mz = $reader.ReadBytes(2)
-                if ($mz -ne 0x4D -or $mz -ne 0x5A) { $reader.Close(); $stream.Close(); continue }
+                # FIX: Corrected boolean logic so it only skips if the MZ signature is genuinely missing
+                if ($mz[0] -ne 0x4D -and $mz[1] -ne 0x5A) {
+                    $reader.Close(); $stream.Close(); continue
+                }
                 
-                # Seek to PE header offset (stored at address 0x3C)
+                # Extract PE structure header locations
                 $stream.Seek(0x3C, [System.IO.SeekOrigin]::Begin)
                 $peOffset = $reader.ReadUInt32()
-                
-                # Seek to Machine field in COFF File Header (PE offset + 4 bytes)
                 $stream.Seek(($peOffset + 4), [System.IO.SeekOrigin]::Begin)
                 $machineType = $reader.ReadUInt16()
                 
                 $reader.Close()
                 $stream.Close()
-                $totalFiles++
                 
-                # Identify Machine Type Architectures
-                # 0xAA64 = Native ARM64
-                # 0x8664 = Emulated Intel x86_64 / AMD64
-                # 0x014c = Emulated Intel x86 32-bit
-                $archLabel = "Unknown"
-                $family = "Other"
-
+                # 0xAA64 = Native ARM64 Machine ID
                 if ($machineType -eq 0xAA64) {
                     $arm64Count++
-                    $archLabel = "ARM64 (Native)"
-                    $family = "ARM"
-                } elseif ($machineType -eq 0x8664) {
-                    $intel64Count++
-                    $archLabel = "x86_64 (64-bit Intel Emulated)"
-                    $family = "Intel"
-                } elseif ($machineType -eq 0x014c) {
-                    $intel32Count++
-                    $archLabel = "x86 (32-bit Intel Emulated)"
-                    $family = "Intel"
                 } else {
-                    $otherCount++
-                    $archLabel = "Other (0x{0:X4})" -f $machineType
-                    $family = "Other"
+                    $emulatedCount++
+                    $archLabel = switch($machineType) {
+                        0x8664 { "x86_64 (64-bit Intel Emulated)" }
+                        0x014c { "x86 (32-bit Intel Emulated)" }
+                        default { "Unknown Arch (0x{0:X4})" -f $machineType }
+                    }
+                    $emulatedList += [PSCustomObject]@{
+                        FileName     = $file.Name
+                        FilePath     = $file.FullName
+                        Architecture = $archLabel
+                    }
                 }
-
-                # Capture component metrics object
-                $componentList += [PSCustomObject]@{
-                    FileName     = $file.Name
-                    Family       = $family
-                    Architecture = $archLabel
-                    RelativePath = $file.FullName.Replace($llvmPath, "")
-                }
-            } catch {
-                # Safe skip for locked files
+            }
+            catch {
+                $failedReads++
             }
         }
-
-        if ($totalFiles -eq 0) {
-            Write-Error "No valid binaries found to audit inside $llvmPath."
+        
+        $totalChecked = $arm64Count + $emulatedCount
+        if ($totalChecked -eq 0) {
+            Write-Error "No valid executable or library binaries were found to audit."
             exit 1
         }
-
-        # Mathematical Percentage Math Evaluation
-        $armPercentage   = [Math]::Round(($arm64Count / $totalFiles) * 100, 2)
-        $intelPercentage = [Math]::Round((($intel64Count + $intel32Count) / $totalFiles) * 100, 2)
-        $otherPercentage = [Math]::Round(($otherCount / $totalFiles) * 100, 2)
-
-        # 1. Standard Terminal Output Logging Summary
-        Write-Host "`n=========================================================="
-        Write-Host "📊 COMPOSITION SUMMARY REPORT: ARM vs INTEL"
-        Write-Host "=========================================================="
+        
+        # Calculate exact native ratio
+        $nativePercentage = [Math]::Round(($arm64Count / $totalChecked) * 100, 2)
+        
+        Write-Host "`n========================================="
+        Write-Host "📊 LLVM NATIVE COMPOSITION REPORT"
+        Write-Host "========================================="
         Write-Host "• Native ARM64 Binaries : $arm64Count"
-        Write-Host "• Emulated Intel Binaries: $($intel64Count + $intel32Count) ($intel64Count x64 / $intel32Count x86)"
-        Write-Host "• Total Validated Files : $totalFiles"
-        Write-Host "----------------------------------------------------------"
-        Write-Host "➔ TOTAL NATIVE ARM CONCENTRATION  : $armPercentage %"
-        Write-Host "➔ TOTAL EMULATED INTEL EFFICIENCY : $intelPercentage %"
-        Write-Host "==========================================================`n"
-
-        # Output complete sorted inventory to the workflow terminal log
-        $componentList | Sort-Object Family, FileName | Format-Table -Property FileName, Architecture, RelativePath -AutoSize
-
-        # 2. Rich Markdown Generation for the GitHub Run Summary UI Page
-        Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "### 📊 Composition Breakdown: ARM vs Intel (LLVM)"
-        Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "| Architecture | Quantity | Percentage |"
-        Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "| :--- | :--- | :--- |"
-        Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "| 🟩 **Native ARM64** | $arm64Count | **$armPercentage %** |"
-        Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "| 🟦 **Emulated Intel (x86/x64)** | $($intel64Count + $intel32Count) | **$intelPercentage %** |"
-        Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "| 🟨 Other | $otherCount | $otherPercentage % |"
-        Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "| **Total** | **$totalFiles** | **100 %** |"
+        Write-Host "• Emulated Binaries     : $emulatedCount"
+        Write-Host "• Unreadable System Files: $failedReads"
+        Write-Host "• TOTAL VALID BINARIES   : $totalChecked"
+        Write-Host "-----------------------------------------"
+        Write-Host "➔ THIS LLVM INSTALLATION IS $nativePercentage% NATIVE ARM64"
+        Write-Host "=========================================`n"
         
-        Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "### 📂 Detailed Inventory of Non-ARM64 / Emulated Components"
-        Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "| File Name | Detected Architecture | Relative Path |"
-        Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "| :--- | :--- | :--- |"
+        if ($emulatedCount -gt 0) {
+            Write-Host "⚠️ Breakdown of Emulated/Non-ARM64 Components Found:"
+            $emulatedList | Format-Table -AutoSize
+        }
         
-        $nonArmFiles = $componentList | Where-Object { $_.Family -ne "ARM" } | Sort-Object FileName
-        if ($nonArmFiles.Count -gt 0) {
-            foreach ($item in $nonArmFiles) {
-                Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "| \`$($item.FileName)\` | $($item.Architecture) | \`$($item.RelativePath)\` |"
-            }
+        # Handle passing/failing criteria based on "mostly" rule (e.g. > 90% Native)
+        if ($nativePercentage -lt 90.00) {
+            Write-Host "❌ CRITICAL: Installation is NOT mostly native ($nativePercentage% < 90%). Tainted toolchain performance risks detected."
+            exit 1
         } else {
-            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "| *None* | *All components inside this directory are 100% Native ARM64* | *N/A* |"
+            Write-Host "✅ SUCCESS: LLVM installation is verified as mostly native ARM64!"
         }
