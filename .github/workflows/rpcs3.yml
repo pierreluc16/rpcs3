@@ -1,44 +1,53 @@
-name: Strict Error Verification Test
+name: Test Specific Clang Errors on Ubuntu 24.04 ARM
 
 on:
   push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
-  workflow_dispatch:
+    branches: [ main ]
+  workflow_dispatch: # Allows you to trigger the test manually from the Actions tab
 
 jobs:
-  verify-error:
+  test-errors-arm:
+    # Target the official GitHub Actions Ubuntu 24.04 ARM64 runner
     runs-on: ubuntu-24.04-arm
-    container:
-      image: rust:1.80-slim
-
     steps:
-    - name: Checkout Code
-      uses: actions/checkout@v4
+      - name: Check out repository
+        uses: actions/checkout@v4
 
-    - name: Create Dynamic Cargo Environment
-      run: |
-        echo "=== Generating absolute minimal Cargo workspace ==="
-        # Forces the creation of a temporary project structure to fix the missing Cargo.toml error
-        echo '[package]' > Cargo.toml
-        echo 'name = "rpcs3_test"' >> Cargo.toml
-        echo 'version = "0.1.0"' >> Cargo.toml
-        echo 'edition = "2021"' >> Cargo.toml
-        echo '[dependencies]' >> Cargo.toml
-        echo 'clang-sys = "1.8.1"' >> Cargo.toml
-        mkdir -p src
-        echo 'fn main() {}' > src/main.rs
+      # --- TEST 1: Check for llvm-config presence ---
+      - name: Test Error 1 (llvm-config missing)
+        id: test_llvm_config
+        continue-on-error: true
+        run: |
+          echo "Checking for the presence of llvm-config on ARM..."
+          llvm-config --prefix
 
-    - name: Diagnostic System Sweep
-      run: |
-        echo "=== Locating any native llvm-config ==="
-        which llvm-config || echo "No default llvm-config executable found in PATH."
-        find /usr/bin /usr/local/bin -name "llvm-config*" 2>/dev/null || true
-        
-        echo "=== Locating any native libclang shared libraries ==="
-        find /usr/lib /usr/local/lib /lib -name "libclang.so*" 2>/dev/null || true
+      # --- TEST 2: Check for libclang.so presence ---
+      - name: Test Error 2 (libclang.so missing)
+        id: test_libclang
+        continue-on-error: true
+        run: |
+          echo "Searching for libclang shared libraries on ARM..."
+          # Attempts to find libclang in standard system paths
+          ldconfig -p | grep libclang
 
-    - name: Execute Cargo Check
-      # Runs successfully now because Cargo.toml was created dynamically above
-      run: cargo check -p clang-sys --verbose
+      # --- TEST SUMMARY REPORT ---
+      - name: Evaluate Error Presence
+        run: |
+          echo "=== UBUNTU 24.04 ARM TEST RESULTS ==="
+          
+          if [ "${{ steps.test_llvm_config.outcome }}" = "success" ]; then
+            echo "✅ ERROR 1 RESOLVED: 'llvm-config' is present by default on ARM."
+          else
+            echo "❌ ERROR 1 STILL OCCURRING: 'llvm-config' is missing (No such file or directory)."
+          fi
+
+          if [ "${{ steps.test_libclang.outcome }}" = "success" ]; then
+            echo "✅ ERROR 2 RESOLVED: 'libclang.so' is detected on the ARM system."
+          else
+            echo "❌ ERROR 2 STILL OCCURRING: 'libclang.so' is missing from ARM system paths."
+          fi
+          
+          # Force the job to fail if either error is still active
+          if [ "${{ steps.test_llvm_config.outcome }}" = "failure" ] || [ "${{ steps.test_libclang.outcome }}" = "failure" ]; then
+            exit 1
+          fi
