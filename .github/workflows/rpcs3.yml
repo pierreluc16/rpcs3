@@ -1,42 +1,58 @@
-name: Test Clang Error Presence
+name: Ultimate Clang Error Test
 
 on: [push, workflow_dispatch]
 
 jobs:
-  diagnostic-test:
+  test-both-errors:
     runs-on: ubuntu-24.04-arm
 
     steps:
-      - name: Verify Clang Sys Dependencies
+      - name: Replicate Rust Clang-Sys Behavior
+        id: diagnostic
         run: |
-          ERROR_DETECTED=false
+          ERROR_1=false
+          ERROR_2=false
 
-          echo "=== Testing Error 1: llvm-config execution ==="
-          if ! command -v llvm-config &> /dev/null; then
-            echo "❌ ERROR DETECTED: 'llvm-config' could not be executed (No such file or directory)."
-            ERROR_DETECTED=true
+          echo "=================================================="
+          echo "🔍 TESTING ERROR 1: llvm-config Execution"
+          echo "=================================================="
+          # Attempt the exact command the crate failed on: "llvm-config --prefix"
+          if ! llvm-config --prefix > /dev/null 2>&1; then
+            echo "❌ ERROR 1 IS PRESENT!"
+            echo "   Reason: 'llvm-config' executable cannot be found in PATH."
+            echo "   Rust Error: (error: No such file or directory (os error 2))"
+            ERROR_1=true
           else
-            echo "✅ OK: llvm-config is executable. Version: $(llvm-config --version)"
+            echo "✅ ERROR 1 IS FIXED!"
+            echo "   Location: $(which llvm-config)"
+            echo "   Prefix path: $(llvm-config --prefix)"
           fi
 
           echo ""
-          echo "=== Testing Error 2: libclang shared libraries ==="
-          # Look for libclang.so files just like clang-sys does
-          LIB_MATCHES=$(find /usr/lib /usr/local/lib -name "libclang.so*" 2>/dev/null)
+          echo "=================================================="
+          echo "🔍 TESTING ERROR 2: libclang Shared Library Search"
+          echo "=================================================="
+          # Scan common library directories for standard libclang files
+          LIBCLANG_FILES=$(find /usr/lib /usr/local/lib /lib -name "libclang.so" -o -name "libclang-*.so" 2>/dev/null)
           
-          if [ -z "$LIB_MATCHES" ]; then
-            echo "❌ ERROR DETECTED: Result::unwrap() will fail. No valid shared libraries matching 'libclang.so' or 'libclang-*.so' found."
-            ERROR_DETECTED=true
+          if [ -z "$LIBCLANG_FILES" ]; then
+            echo "❌ ERROR 2 IS PRESENT!"
+            echo "   Reason: No shared objects matching ['libclang.so', 'libclang-*.so'] found."
+            echo "   Rust Error: called Result::unwrap() on an Err value"
+            ERROR_2=true
           else
-            echo "✅ OK: Found valid libclang shared libraries at:"
-            echo "$LIB_MATCHES"
+            echo "✅ ERROR 2 IS FIXED!"
+            echo "   Found matching libraries:"
+            echo "$LIBCLANG_FILES"
           fi
 
           echo ""
-          # Force the job to fail if the environment is broken
-          if [ "$ERROR_DETECTED" = true ]; then
-            echo "⚠️ VERDICT: The environment is broken. Your Rust compilation will fail with the clang-sys error."
+          echo "=================================================="
+          echo "📊 FINAL DIAGNOSTIC VERDICT"
+          echo "=================================================="
+          if [ "$ERROR_1" = true ] || [ "$ERROR_2" = true ]; then
+            echo "🚨 Result: Environment is BROKEN. Rust compilation will fail."
             exit 1
           else
-            echo "🎉 VERDICT: The environment is clean! Rust clang-sys will compile successfully."
+            echo "🎉 Result: Environment is PERFECT. Ready for Cargo build."
           fi
