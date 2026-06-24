@@ -13,16 +13,18 @@ jobs:
     - name: Checkout Repository
       uses: actions/checkout@v4
 
+    # Uses only the pre-installed file space without running an installer or any fixes
     - name: Run Recursive Binary Architecture Breakdown
       shell: pwsh
       run: |
         $llvmPath = "C:\Program Files\LLVM"
+        
         if (-not (Test-Path $llvmPath)) {
-            Write-Error "LLVM installation directory was not found at: $llvmPath"
+            Write-Error "LLVM installation directory was not found at default path: $llvmPath"
             exit 1
         }
         
-        Write-Host "🔍 Initiating deep architectural scanning on components..."
+        Write-Host "🔍 Initiating deep architectural scanning on pre-installed components inside: $llvmPath"
         $files = Get-ChildItem -Path $llvmPath -Recurse -Include *.exe, *.dll
         
         $arm64Count = 0
@@ -65,19 +67,19 @@ jobs:
                     }
                 }
             } catch {
-                # Safe skip for system lock blocks
+                # Safe skip for locked system objects or hidden deployment files
             }
         }
 
         if ($totalFiles -eq 0) {
-            Write-Error "No valid binaries found to audit."
+            Write-Error "No valid binaries found to audit inside $llvmPath."
             exit 1
         }
 
         $arm64Percentage = [Math]::Round(($arm64Count / $totalFiles) * 100, 2)
         $emulatedPercentage = [Math]::Round(($emulatedCount / $totalFiles) * 100, 2)
 
-        # 1. Standard Runner Log Terminal Strings
+        # 1. Standard Terminal Output Logging Summary
         Write-Host "`n=========================================================="
         Write-Host "📊 LLVM COMPOSITION SUMMARY REPORT"
         Write-Host "=========================================================="
@@ -91,9 +93,8 @@ jobs:
             $emulatedList | Format-Table -Property FileName, Architecture, RelativePath -AutoSize
         }
 
-        # 2. Corrected Target Summary Generation Block
-        # Uses explicit $env:GITHUB_STEP_SUMMARY to bypass local null evaluations
-        Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "### 📊 LLVM Binary Composition Audit"
+        # 2. Markdown Generation for the GitHub Run Summary UI Page
+        Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "### 📊 Pre-Installed LLVM Composition Audit"
         Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "| Metric | Value |"
         Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "| :--- | :--- |"
         Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "| **Native ARM64 Concentration** | **$arm64Percentage %** ($arm64Count/$totalFiles) |"
@@ -103,12 +104,10 @@ jobs:
             Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "### ⚠️ Breakdown of Emulated Components"
             Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "| File Name | Detected Architecture | Relative Path |"
             Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "| :--- | :--- | :--- |"
-            
-            # Clean string parsing without template token collision risks
             foreach ($item in $emulatedList) {
-                Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "| `$($item.FileName) | $($item.Architecture) | `$($item.RelativePath) |"
+                Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "| \`$($item.FileName)\` | $($item.Architecture) | \`$($item.RelativePath)\` |"
             }
         } else {
             Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "### ✅ Purity Check Passed"
-            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "Zero emulated files found. Toolchain profile configuration is 100% native ARM64."
+            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "Zero emulated files found. Pre-installed toolchain is 100% native ARM64."
         }
