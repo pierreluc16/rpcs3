@@ -1,80 +1,51 @@
-name: Strict Verification of Clang Errors on Ubuntu 24.04 ARM
+name: Check Clang and LLVM Binaries (Ubuntu 24.04 ARM)
 
 on:
   push:
-    branches: [ main ]
-  workflow_dispatch: # Allows you to manually trigger this anytime from the GitHub UI
+    branches: [ main, master ]
+  workflow_dispatch: # Allows manual triggering from the Actions tab
 
 jobs:
-  strict-test:
+  diagnostic:
+    name: Locate Clang Tools Natively
     runs-on: ubuntu-24.04-arm
-    
-    env:
-      LIBCLANG_PATH: /usr/lib/llvm-18/lib
-      LLVM_CONFIG_PATH: /usr/lib/llvm-18/bin/llvm-config
-
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Install Rust Toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      # --- CONSTRUCT REAL CARGO EXPERIMENT ---
-      - name: Generate Dummy Project to Force Clang-Sys Probing
-        run: |
-          cargo new arm-clang-tester --bin
-          cd arm-clang-tester
-          echo 'clang-sys = "=1.8.1"' >> Cargo.toml
-          echo 'fn main() { unsafe { clang_sys::clang_createIndex(0, 0); } }' > src/main.rs
-
-      # --- THE ULTIMATE COMPILATION TEST ---
-      - name: Execute Cargo Build (Isolating the Errors)
-        id: build_execution
-        continue-on-error: true
-        run: |
-          cd arm-clang-tester
-          # Save stdout and stderr to inspect the exact errors later
-          cargo build --verbose > ../build.log 2>&1
-          cat ../build.log
-
-      # --- FINAL MULTI-ERROR REPORTING SUITE ---
-      - name: Evaluate Error States
+      # --- STEP 1: SEARCH FOR LLVM-CONFIG ---
+      - name: Find llvm-config Path
         run: |
           echo "=========================================================="
-          echo "          UBUNTU 24.04 ARM REALITY-CHECK RESULTS          "
+          echo "        1. SEARCHING FOR LLVM-CONFIG BINARIES             "
           echo "=========================================================="
           
-          # 1. Check if the whole compilation passed
-          if [ "${{ steps.build_execution.outcome }}" = "success" ]; then
-            echo "✅ BOTH ERRORS RESOLVED NATIVELY!"
-            echo "The compilation succeeded. You do not need to install apt packages anymore."
-            exit 0
-          fi
-
-          echo "❌ LOG ANALYSIS FOR TARGETED CRASHES:"
-          echo ""
-
-          # 2. Check for Error 1 (llvm-config missing warning)
-          if grep -q "couldn't execute llvm-config --prefix" ../build.log; then
-            echo "❌ ERROR 1 IS STILL OCCURRING!"
-            echo "   -> Warning: clang-sys could not execute 'llvm-config'"
+          echo "Checking default system PATH..."
+          if command -v llvm-config &> /dev/null; then
+            echo "✅ Global binary found at: $(which llvm-config)"
           else
-            echo "✅ ERROR 1 IS FIXED!"
-            echo "   -> 'llvm-config' path warning did not trigger."
+            echo "❌ 'llvm-config' is NOT available in the default system PATH."
           fi
-
+          
           echo ""
+          echo "Scanning filesystem for versioned LLVM tools..."
+          sudo find /usr -name "llvm-config*" 2>/dev/null || echo "No llvm-config variants found."
 
-          # 3. Check for Error 2 (libclang.so unwrap crash)
-          if grep -q "couldn't find any valid shared libraries matching" ../build.log; then
-            echo "❌ ERROR 2 IS STILL OCCURRING!"
-            echo "   -> Called Result::unwrap() on an Err value: couldn't find libclang.so"
-          else
-            echo "✅ ERROR 2 IS FIXED!"
-            echo "   -> Crate successfully bound to the shared library without unwrap() crashing."
-          fi
-
-          echo ""
+      # --- STEP 2: SEARCH FOR LIBCLANG.SO ---
+      - name: Find libclang.so Path
+        run: |
           echo "=========================================================="
-          exit 1
+          echo "        2. SEARCHING FOR LIBCLANG SHARED LIBRARIES        "
+          echo "=========================================================="
+          
+          echo "Checking system dynamic linker registry (ldconfig)..."
+          if ldconfig -p 2>/dev/null | grep -q "libclang"; then
+            echo "✅ Shared libraries registered in cache:"
+            ldconfig -p | grep libclang
+          else
+            echo "❌ No libclang references tracked in ldconfig cache."
+          fi
+          
+          echo ""
+          echo "Scanning filesystem for exact or versioned libclang files..."
+          sudo find /usr -name "libclang.so*" 2>/dev/null || echo "No libclang.so files found."
