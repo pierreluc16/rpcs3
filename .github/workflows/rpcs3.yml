@@ -32,17 +32,17 @@ jobs:
         # Safely extract system configuration paths
         ICU_VERSION=$(pkg-config --modversion icu-i18n)
         CFLAGS=$(pkg-config --cflags icu-i18n)
+        LIB_DIR=$(pkg-config --variable=libdir icu-i18n)
+        INC_DIR=$(pkg-config --variable=includedir icu-i18n)
 
         echo "• Detected ICU Version : $ICU_VERSION"
         echo "• Compiler Flags       : $CFLAGS"
+        echo "• Library Directory    : $LIB_DIR"
 
         echo -e "\n========================================================"
         echo "🔍 STEP 2: FILE SYSTEM PATHS & DEEP BINARY AUDIT"
         echo "========================================================"
         
-        LIB_DIR=$(pkg-config --variable=libdir icu-i18n)
-        INC_DIR=$(pkg-config --variable=includedir icu-i18n)
-
         echo "• Checking Header Path : $INC_DIR/unicode/ucnv.h"
         if [ -f "$INC_DIR/unicode/ucnv.h" ]; then
             echo "  ✅ Main C headers present."
@@ -100,11 +100,12 @@ int main() {
 EOF
 
         echo "• Compiling test verification binary..."
-        # FIX: Explicit addition of standard Ubuntu 24.04 library components to prevent linkage failure
-        g++ icu_test.cpp -o icu_test_runtime $CFLAGS -licui18n -licuuc -licudata -lpthread -ldl
+        # FIX: Explicit inclusion of -L library directory lookup path + standard C++ flag override
+        g++ -std=c++17 icu_test.cpp -o icu_test_runtime $CFLAGS -L"$LIB_DIR" -licui18n -licuuc -licudata -lpthread -ldl
 
         echo "• Running execution test..."
-        ./icu_test_runtime
+        # Pass library directory to runtime execution environment to avoid loading errors
+        LD_LIBRARY_PATH="$LIB_DIR" ./icu_test_runtime
 
         echo -e "\n========================================================"
         echo "🎉 DEEP SCAN COMPLETE: ALL LAYERS OPERATIONAL"
