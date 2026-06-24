@@ -17,7 +17,6 @@ jobs:
       shell: pwsh
       run: |
         $llvmPath = "C:\Program Files\LLVM"
-        
         if (-not (Test-Path $llvmPath)) {
             Write-Error "LLVM installation directory was not found at: $llvmPath"
             exit 1
@@ -36,75 +35,75 @@ jobs:
                 $stream = New-Object System.IO.FileStream($file.FullName, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::Read)
                 $reader = New-Object System.IO.BinaryReader($stream)
                 
-                # Check DOS Header magic number (MZ)
                 $mz = $reader.ReadBytes(2)
-                if ($mz -ne 0x4D -or $mz -ne 0x5A) {
-                    $reader.Close(); $stream.Close(); continue
-                }
+                if ($mz -ne 0x4D -or $mz -ne 0x5A) { $reader.Close(); $stream.Close(); continue }
                 
-                # Seek to PE header offset (stored at 0x3C)
                 $stream.Seek(0x3C, [System.IO.SeekOrigin]::Begin)
                 $peOffset = $reader.ReadUInt32()
                 
-                # Seek to Machine field in COFF File Header (PE offset + 4 bytes)
                 $stream.Seek(($peOffset + 4), [System.IO.SeekOrigin]::Begin)
                 $machineType = $reader.ReadUInt16()
                 
                 $reader.Close()
                 $stream.Close()
-                
                 $totalFiles++
                 
-                # 0xAA64 = IMAGE_FILE_MACHINE_ARM64
                 if ($machineType -eq 0xAA64) {
                     $arm64Count++
                 } else {
                     $emulatedCount++
-                    
-                    # Identify specific machine architecture mismatch label
                     $archLabel = switch($machineType) {
-                        0x8664 { "x86_64 (64-bit Intel Emulated)" }
-                        0x014c { "x86 (32-bit Intel Emulated)" }
-                        0x01c4 { "ARM (32-bit Legacy)" }
+                        0x8664  { "x86_64 (64-bit Intel Emulated)" }
+                        0x014c  { "x86 (32-bit Intel Emulated)" }
+                        0x01c4  { "ARM (32-bit Legacy)" }
                         default { "Unknown Arch (0x{0:X4})" -f $machineType }
                     }
-                    
-                    # Capture component profile objects
                     $emulatedList += [PSCustomObject]@{
                         FileName     = $file.Name
                         Architecture = $archLabel
                         RelativePath = $file.FullName.Replace($llvmPath, "")
                     }
                 }
-            }
-            catch {
-                # Ignore files locked by running background processes
-            }
+            } catch {}
         }
 
         if ($totalFiles -eq 0) {
-            Write-Error "No valid executable or library binaries were found to audit."
+            Write-Error "No valid binaries found to audit."
             exit 1
         }
 
-        # Mathematical Percentage Math Evaluation
         $arm64Percentage = [Math]::Round(($arm64Count / $totalFiles) * 100, 2)
         $emulatedPercentage = [Math]::Round(($emulatedCount / $totalFiles) * 100, 2)
 
+        # 1. Output to standard runner logs
         Write-Host "`n=========================================================="
         Write-Host "📊 LLVM COMPOSITION SUMMARY REPORT"
         Write-Host "=========================================================="
         Write-Host "• Native ARM64 Binaries    : $arm64Count files"
         Write-Host "• Non-ARM64 Binaries       : $emulatedCount files"
         Write-Host "• Total Analyzed Components: $totalFiles files"
-        Write-Host "----------------------------------------------------------"
         Write-Host "➔ TOTAL NATIVE ARM64 CONCENTRATION : $arm64Percentage %"
-        Write-Host "➔ TOTAL EMULATED CONCENTRATION     : $emulatedPercentage %"
         Write-Host "==========================================================`n"
 
         if ($emulatedCount -gt 0) {
-            Write-Host "⚠️ Breakdown of Emulated/Non-ARM64 Components Found:"
             $emulatedList | Format-Table -Property FileName, Architecture, RelativePath -AutoSize
+        }
+
+        # 2. Inject rich formatting directly into the GitHub UI Summary page
+        Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "### 📊 LLVM Binary Composition Audit"
+        Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "| Metric | Value |"
+        Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "| :--- | :--- |"
+        Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "| **Native ARM64 Concentration** | **$arm64Percentage %** ($arm64Count/$totalFiles) |"
+        Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "| Emulated Concentration | $emulatedPercentage % ($emulatedCount/$totalFiles) |"
+        
+        if ($emulatedCount -gt 0) {
+            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "### ⚠️ Breakdown of Emulated Components"
+            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "| File Name | Detected Architecture | Relative Path |"
+            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "| :--- | :--- | :--- |"
+            foreach ($item in $emulatedList) {
+                Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "| \`${{ $item.FileName }}\` | ${{ $item.Architecture }} | \`${{ $item.RelativePath }}\` |"
+            }
         } else {
-            Write-Host "✅ Zero emulated files found. Toolchain folder profile configuration is flawless."
+            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "### ✅ Purity Check Passed"
+            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "Zero emulated files found. Toolchain profile configuration is 100% native ARM64."
         }
