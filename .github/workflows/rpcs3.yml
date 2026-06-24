@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-24.04-arm
 
     steps:
-      - name: Locate LLVM-config and LibClang
+      - name: 🔍 Locate LLVM-config and LibClang
         run: |
           # 1. Locate llvm-config
           LLVM_CONF=$(which llvm-config-18 || which llvm-config-19 || which llvm-config-17 || which llvm-config)
