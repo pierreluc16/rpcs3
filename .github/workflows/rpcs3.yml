@@ -12,41 +12,54 @@ jobs:
     runs-on: ubuntu-24.04-arm
 
     steps:
-      - name: Check llvm-config Installation
+      - name: Verify Hardware Platform
+        run: |
+          echo "=== Target Architecture ==="
+          uname -m
+          echo "=== OS Distribution ==="
+          lsb_release -d
+
+      - name: Check llvm-config Command
         run: |
           echo "=== Checking for llvm-config ==="
+          
+          # Check global path first
           if command -v llvm-config &> /dev/null; then
-            echo "✅ llvm-config is installed!"
+            echo "✅ Global llvm-config command found!"
             which llvm-config
             llvm-config --version
           else
-            echo "❌ Generic 'llvm-config' command NOT found."
-            echo "Checking for any versioned instances (e.g., llvm-config-18):"
-            ls -l /usr/bin/llvm-config* || echo "No llvm-config binaries found at all."
+            echo "ℹ️ Generic 'llvm-config' command is NOT in the global PATH."
+            echo "Searching for versioned binaries in /usr/bin/:"
+            
+            # Listing without crashing if empty
+            ls -l /usr/bin/llvm-config* 2>/dev/null || echo "❌ No llvm-config binaries found at all."
           fi
 
-      - name: Check libclang Installation
+      - name: Check libclang Binary Files
         run: |
           echo "=== Checking for libclang shared libraries ==="
-          # Search common system directories for libclang binaries
-          LIB_PATHS=$(find /usr/lib /usr/local/lib -name "libclang.so*" 2>/dev/null)
+          
+          # Safe execution: find will not cause step to fail with '|| true'
+          LIB_PATHS=$(find /usr/lib /usr/local/lib -name "libclang.so*" 2>/dev/null || true)
           
           if [ -n "$LIB_PATHS" ]; then
-            echo "✅ libclang is installed at:"
+            echo "✅ libclang binaries are installed at:"
             echo "$LIB_PATHS"
           else
-            echo "❌ No libclang.so files found in standard library directories."
+            echo "❌ No libclang.so files found in standard library paths."
           fi
 
-      - name: Check Clang C Headers Installation
+      - name: Check Clang C Header Files
         run: |
           echo "=== Checking for libclang Header Files ==="
-          # Search for the core header file required for libclang development
-          HEADER_PATHS=$(find /usr/include /usr/local/include /usr/lib/llvm* -name "Index.h" 2>/dev/null | grep "clang-c")
+          
+          # The entire pipeline finishes with '|| true' so an empty match returns exit code 0
+          HEADER_PATHS=$(find /usr/include /usr/local/include /usr/lib/llvm* -name "Index.h" 2>/dev/null | grep "clang-c" || true)
           
           if [ -n "$HEADER_PATHS" ]; then
             echo "✅ libclang headers are installed at:"
             echo "$HEADER_PATHS"
           else
-            echo "❌ Index.h (clang-c) NOT found. Development headers are missing."
+            echo "❌ Index.h (clang-c) NOT found. Development headers are completely missing."
           fi
