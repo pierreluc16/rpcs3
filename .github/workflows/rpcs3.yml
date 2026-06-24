@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  test-bug-report:
+  test-bug-and-fix:
     runs-on: windows-11-arm
 
     steps:
@@ -44,7 +44,7 @@ jobs:
         }
 
     # =========================================================================
-    # PHASE 2: APPLY FIX
+    # PHASE 2: APPLY FIX (INSTALL NATIVE LLVM ARM64)
     # =========================================================================
     - name: 2. Apply Fix (Install Native LLVM ARM64)
       uses: KyleMayes/install-llvm-action@v2
