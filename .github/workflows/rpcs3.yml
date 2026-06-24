@@ -1,124 +1,35 @@
-name: ICU Dynamic Auto-Version Toolchain Remediation
+name: Check libicu70 Presence on Ubuntu 24.04
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "master" ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ "main", "master" ]
   workflow_dispatch:
 
 jobs:
-  repair-and-verify-icu:
-    name: Fix Incomplete ICU Layout
-    runs-on: ubuntu-latest
+  detect-dependency:
+    runs-on: ubuntu-24.04
 
     steps:
-    - name: Checkout Code Repository
-      uses: actions/checkout@v4
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-    - name: Execute Smart ICU Remediation & Multi-Method Scan
-      shell: bash
-      run: |
-        set -euo pipefail
-
-        # =======================================================
-        # STEP 1: INITIAL ASSESSMENT & AUTOMATED REMEDIATION
-        # =======================================================
-        echo "======================================================="
-        echo "🔍 STARTING ICU DEPENDENCY CHECK"
-        echo "======================================================="
-        
-        if ! pkg-config --exists icu-i18n; then
-            echo "⚠️ [ALERT] Matched partial installation state (libicu-dev is missing)."
-            echo "🔧 Launching automated Ubuntu system package restoration..."
-            
-            sudo apt-get update -y
-            sudo apt-get install -y libicu-dev icu-devtools pkg-config binutils
-            echo "✅ Package installation step completed successfully."
-        else
-            echo "✅ ICU Development headers are already fully present on this host."
-        fi
-
-        # =======================================================
-        # STEP 2: AUTOMATIC VERSION DETECTION & EXTRACTION
-        # =======================================================
-        # Dynamically extract full semantic version (e.g., 78.2 or 74.1)
-        ICU_VERSION=$(pkg-config --modversion icu-i18n)
-        
-        # Dynamically isolate the MAJOR version number (e.g., 78 or 74)
-        ICU_MAJOR=$(echo "$ICU_VERSION" | cut -d. -f1)
-        
-        LIB_DIR=$(pkg-config --variable=libdir icu-i18n)
-
-        echo -e "\n======================================================="
-        echo "📊 RUNNING POST-REMEDIATION MULTI-METHOD VALIDATION"
-        echo "======================================================="
-
-        # [Method 1] Verification via pkg-config mapping engine
-        echo "[Method 1] Checking via pkg-config..."
-        if pkg-config --exists icu-i18n; then
-            echo "✅ pkg-config: Found icu-i18n Metadata (Version: $ICU_VERSION)"
-        else
-            echo "❌ pkg-config: Component registration metadata is broken or corrupted."
-            exit 1
-        fi
-
-        # [Method 2] Verification via uconv string conversion tool utility
-        echo "[Method 2] Checking via uconv command utility..."
-        if command -v uconv >/dev/null 2>&1; then
-            echo "✅ uconv: Command utility discovered active in runtime execution PATH."
-            echo "Ecosystem Validation" | uconv -f utf-8 -t utf-16 > /dev/null
-        else
-            echo "❌ uconv: Executable utility was not successfully bound to the host environment."
-            exit 1
-        fi
-
-        # [Method 3] Verification via Debian DPKG Core Database (Dynamic Name)
-        echo "[Method 3] Checking via dpkg (installed packages database)..."
-        # Queries the database using the dynamically detected major number
-        if dpkg -s "libicu${ICU_MAJOR}" >/dev/null 2>&1; then
-            DPKG_META=$(dpkg-query -W -f='${Package}:${Architecture} (Version: ${Version})' "libicu${ICU_MAJOR}")
-            echo "✅ DETECTED: $DPKG_META exists inside system database tracking links."
-        else
-            echo "❌ DETECTED: OS package manager cache failed to index the libicu${ICU_MAJOR} package."
-            exit 1
-        fi
-
-        # [Method 4] Verification via Direct Physical System Binary Scan (.so)
-        echo "[Method 4] Direct system scanning for library files (.so)..."
-        
-        # Target path adapts dynamically to whatever major version is deployed
-        TARGET_SO_FILE=$(readlink -f "$LIB_DIR/libicuuc.so.${ICU_MAJOR}")
-        
-        if [ -f "$TARGET_SO_FILE" ]; then
-            echo "✅ DETECTED: Active .so files discovered in the system folder."
-            echo "   - Real Library Target Path -> $TARGET_SO_FILE"
-            
-            # Low-level check to guarantee internal binary layout stability
-            if nm -D "$TARGET_SO_FILE" | grep -q "u_init"; then
-                echo "   ➔ Internal binary symbol integrity validation: PASSED"
-            else
-                echo "   ❌ CRITICAL ERROR: Found library file but core functions are corrupt."
-                exit 1
-            fi
-        else
-            echo "❌ CRITICAL ERROR: Dynamic linker target reference tracking is broken for libicuuc.so.${ICU_MAJOR}"
-            exit 1
-        fi
-
-        # =======================================================
-        # STEP 3: EXPORT RESOLVED METADATA TO THE PIPELINE
-        # =======================================================
-        echo -e "\n======================================================="
-        echo "🎉 Final Result: ICU IS FULLY INSTALLED & COMPILATION READY."
-        echo "======================================================="
-        echo "• Fully Resolved System Target Version: $ICU_VERSION (Major: $ICU_MAJOR)"
-        
-        # Safely pass variables downstream via GitHub Environment contexts
-        echo "ICU_VER_VERIFIED=$ICU_VERSION" >> "$GITHUB_ENV"
-        echo "ICU_MAJOR_VERIFIED=$ICU_MAJOR" >> "$GITHUB_ENV"
-        echo "======================================================="
-
-    - name: Next Stage Pipeline Access Test
-      run: |
-        echo "Downstream tasks can now compile using verified ICU Target: ${{ env.ICU_VER_VERIFIED }} (Major: ${{ env.ICU_MAJOR_VERIFIED }})"
+      - name: Detect libicu70
+        run: |
+          TARGET_PKG="libicu70"
+          
+          echo "=== [START] DETECTION WORKFLOW FOR UBUNTU 24.04 ==="
+          echo "[INFO] Vérification de la présence de $TARGET_PKG..."
+          
+          if dpkg -s "$TARGET_PKG" >/dev/null 2>&1; then
+              VERSION=$(dpkg-query -W -f='${Version}' "$TARGET_PKG")
+              echo "[OK] $TARGET_PKG est installé sur le runner (Version : $VERSION)."
+              echo "=== [SUCCESS] WORKFLOW PASSED ==="
+              exit 0
+          else
+              echo "[ERREUR] $TARGET_PKG est ABSENT de ce système."
+              echo "[NOTE] Ubuntu 24.04 n'intègre que libicu74 par défaut."
+              echo "=== [FAILURE] WORKFLOW FAILED ==="
+              exit 1
+          fi
