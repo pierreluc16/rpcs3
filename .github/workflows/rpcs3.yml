@@ -14,7 +14,7 @@ jobs:
     steps:
       - name: 🔍 Locate LLVM-config and LibClang
         run: |
-          # 1. Locate llvm-config
+          # 1. Locate llvm-config and libclang
           LLVM_CONF=$(which llvm-config-18 || which llvm-config-19 || which llvm-config-17 || which llvm-config)
           
           if [ -z "$LLVM_CONF" ]; then
