@@ -1,43 +1,59 @@
-name: Detect All Installed libicu Versions
+name: Audit Clang-Sys Native Error on Ubuntu ARM
 
 on:
   push:
     branches: [ "main", "master" ]
-  pull_request:
-    branches: [ "main", "master" ]
   workflow_dispatch:
 
 jobs:
-  audit-icu-versions:
-    runs-on: ubuntu-22.04
+  test-native-state:
+    runs-on: ubuntu-24.04-arm
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Scan and List All Installed libicu Packages
+      - name: Install Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Attempt Compilation and Capture Output
         run: |
-          echo "=== [START] SCANNING ALL INSTALLED LIBICU VERSIONS ==="
+          echo "=== [START] LAUNCHING COMPILATION ON CLEAN ENVIRONMENT ==="
           
-          # Interrogation de dpkg-query filtrée sur les paquets contenant "libicu"
-          # Le format d'affichage montre : Nom du paquet | Version | Statut d'installation
-          if dpkg-query -W -f='${Status} ${Package} ${Version}\n' "*libicu*" 2>/dev/null | grep "ok installed" > temp_icu.txt; then
-              
-              echo "[INFO] Paquets libicu détectés sur le système :"
-              echo "--------------------------------------------------"
-              
-              # Parcours et mise en forme propre des résultats
-              while read -r status1 status2 status3 package version; do
-                  echo "-> Paquet  : $package"
-                  echo "   Version : $version"
-                  echo "--------------------------------------------------"
-              done < temp_icu.txt
-              
-              rm temp_icu.txt
-              echo "=== [SUCCESS] SCAN COMPLETE ==="
+          # Run compilation and redirect all outputs (stdout + stderr) into a log file.
+          # The "|| true" preventing the pipeline from instantly crashing.
+          cargo build --verbose > build_output.log 2>&1 || true
+          
+          # Display the full log in the pipeline UI for inspection
+          cat build_output.log
+
+      - name: Assert Error Signature
+        run: |
+          echo "=== [START] ANALYZING ERROR SIGNATURES ==="
+          
+          ERROR_FOUND=0
+          
+          # Check for the llvm-config warning
+          if grep -q "could not execute llvm-config" build_output.log; then
+              echo "[DETECTED] Warning: 'could not execute llvm-config' is present."
+              ERROR_FOUND=1
+          fi
+          
+          # Check for the libclang shared library crash
+          if grep -q "couldn't find any valid shared libraries matching" build_output.log; then
+              echo "[DETECTED] Panic: 'couldn't find any valid shared libraries' is present."
+              ERROR_FOUND=1
+          fi
+
+          # Evaluate test findings
+          if [ "$ERROR_FOUND" -eq 1 ]; then
+              echo "=================================================="
+              echo "[AUDIT RESULT] CONFIRMED: The error still occurs natively."
+              echo "=================================================="
               exit 0
           else
-              echo "[ALERTE] Aucun paquet correspondant à '*libicu*' n'est actuellement installé."
-              echo "=== [SUCCESS] SCAN COMPLETE ==="
-              exit 0
+              echo "=================================================="
+              echo "[AUDIT RESULT] UNEXPECTED: The error signature was not found."
+              echo "=================================================="
+              exit 1
           fi
