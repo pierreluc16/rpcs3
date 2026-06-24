@@ -1,4 +1,4 @@
-name: LLVM Installation ARM Percentage Scan
+name: LLVM ARM Percentage and Emulation Breakdown Scan
 
 on:
   push:
@@ -6,30 +6,30 @@ on:
   workflow_dispatch:
 
 jobs:
-  calculate-arm-percentage:
+  analyze-llvm-components:
     runs-on: windows-11-arm
 
     steps:
     - name: Checkout Repository
       uses: actions/checkout@v4
 
-    - name: Run Deep Binary Architecture Scan
+    - name: Run Recursive Binary Architecture Breakdown
       shell: pwsh
       run: |
         $llvmPath = "C:\Program Files\LLVM"
         
         if (-not (Test-Path $llvmPath)) {
-            Write-Error "LLVM folder not found at default location: $llvmPath"
+            Write-Error "LLVM installation directory was not found at: $llvmPath"
             exit 1
         }
         
-        Write-Host "🔍 Initiating recursive binary analysis on: $llvmPath"
+        Write-Host "🔍 Initiating deep architectural scanning on components..."
         $files = Get-ChildItem -Path $llvmPath -Recurse -Include *.exe, *.dll
         
         $arm64Count = 0
-        $x86_64Count = 0
-        $otherCount = 0
+        $emulatedCount = 0
         $totalFiles = 0
+        $emulatedList = @()
 
         foreach ($file in $files) {
             try {
@@ -38,7 +38,7 @@ jobs:
                 
                 # Check DOS Header magic number (MZ)
                 $mz = $reader.ReadBytes(2)
-                if ($mz[0] -ne 0x4D -or $mz[1] -ne 0x5A) {
+                if ($mz -ne 0x4D -or $mz -ne 0x5A) {
                     $reader.Close(); $stream.Close(); continue
                 }
                 
@@ -46,7 +46,7 @@ jobs:
                 $stream.Seek(0x3C, [System.IO.SeekOrigin]::Begin)
                 $peOffset = $reader.ReadUInt32()
                 
-                # Seek to COFF File Header Machine field (PE offset + 4 bytes of PE signature)
+                # Seek to Machine field in COFF File Header (PE offset + 4 bytes)
                 $stream.Seek(($peOffset + 4), [System.IO.SeekOrigin]::Begin)
                 $machineType = $reader.ReadUInt16()
                 
@@ -55,39 +55,56 @@ jobs:
                 
                 $totalFiles++
                 
-                # Identify Machine Type Architectures
                 # 0xAA64 = IMAGE_FILE_MACHINE_ARM64
-                # 0x8664 = IMAGE_FILE_MACHINE_AMD64 (x86_64)
                 if ($machineType -eq 0xAA64) {
                     $arm64Count++
-                } elseif ($machineType -eq 0x8664) {
-                    $x86_64Count++
                 } else {
-                    $otherCount++
+                    $emulatedCount++
+                    
+                    # Identify specific machine architecture mismatch label
+                    $archLabel = switch($machineType) {
+                        0x8664 { "x86_64 (64-bit Intel Emulated)" }
+                        0x014c { "x86 (32-bit Intel Emulated)" }
+                        0x01c4 { "ARM (32-bit Legacy)" }
+                        default { "Unknown Arch (0x{0:X4})" -f $machineType }
+                    }
+                    
+                    # Capture component profile objects
+                    $emulatedList += [PSCustomObject]@{
+                        FileName     = $file.Name
+                        Architecture = $archLabel
+                        RelativePath = $file.FullName.Replace($llvmPath, "")
+                    }
                 }
             }
             catch {
-                # Skip files locked by processes or lacking execution privileges
+                # Ignore files locked by running background processes
             }
         }
 
         if ($totalFiles -eq 0) {
-            Write-Error "No valid executable or dynamic library targets found to scan."
+            Write-Error "No valid executable or library binaries were found to audit."
             exit 1
         }
 
-        # Percentage Math Calculation
+        # Mathematical Percentage Math Evaluation
         $arm64Percentage = [Math]::Round(($arm64Count / $totalFiles) * 100, 2)
-        $emulatedPercentage = [Math]::Round(($x86_64Count / $totalFiles) * 100, 2)
+        $emulatedPercentage = [Math]::Round(($emulatedCount / $totalFiles) * 100, 2)
 
-        Write-Host "`n================================================"
-        Write-Host "📊 LLVM BINARY COMPOSITION AUDIT REPORT"
-        Write-Host "================================================"
-        Write-Host "• Native ARM64 Binaries  : $arm64Count files"
-        Write-Host "• Emulated x86_64 Binaries: $x86_64Count files"
-        Write-Host "• Other Architectures    : $otherCount files"
-        Write-Host "• Total Analyzed Binaries: $totalFiles files"
-        Write-Host "------------------------------------------------"
-        Write-Host "➔ NATIVE ARM64 DISTRIBUTION : $arm64Percentage %"
-        Write-Host "➔ EMULATED DISTRIBUTION     : $emulatedPercentage %"
-        Write-Host "================================================`n"
+        Write-Host "`n=========================================================="
+        Write-Host "📊 LLVM COMPOSITION SUMMARY REPORT"
+        Write-Host "=========================================================="
+        Write-Host "• Native ARM64 Binaries    : $arm64Count files"
+        Write-Host "• Non-ARM64 Binaries       : $emulatedCount files"
+        Write-Host "• Total Analyzed Components: $totalFiles files"
+        Write-Host "----------------------------------------------------------"
+        Write-Host "➔ TOTAL NATIVE ARM64 CONCENTRATION : $arm64Percentage %"
+        Write-Host "➔ TOTAL EMULATED CONCENTRATION     : $emulatedPercentage %"
+        Write-Host "==========================================================`n"
+
+        if ($emulatedCount -gt 0) {
+            Write-Host "⚠️ Breakdown of Emulated/Non-ARM64 Components Found:"
+            $emulatedList | Format-Table -Property FileName, Architecture, RelativePath -AutoSize
+        } else {
+            Write-Host "✅ Zero emulated files found. Toolchain folder profile configuration is flawless."
+        }
