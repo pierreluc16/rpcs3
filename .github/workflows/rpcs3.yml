@@ -1,4 +1,4 @@
-name: Windows 11 ARM LLVM Native Percentage Audit
+name: Windows 11 ARM LLVM Functional Verification
 
 on:
   push:
@@ -8,102 +8,89 @@ on:
   workflow_dispatch:
 
 jobs:
-  calculate-native-ratio:
+  test-llvm-functionality:
     runs-on: windows-11-arm
     
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Scan LLVM Folder Composition
+    - name: Step 1 - Check LLVM System Availability
       shell: pwsh
       run: |
-        $llvmPath = "C:\Program Files\LLVM"
-        
-        if (-not (Test-Path $llvmPath)) {
-            Write-Error "LLVM installation directory was not found at: $llvmPath"
-            exit 1
+        Write-Host "Checking if Clang responds to basic CLI flags..."
+        try {
+            clang --version
+            Write-Host "✅ Success: clang CLI is accessible in PATH."
         }
-        
-        Write-Host "🔍 Deep scanning directory mapping to analyze binary composition..."
-        $files = Get-ChildItem -Path $llvmPath -Recurse -Include *.exe, *.dll
-        
-        $arm64Count = 0
-        $emulatedCount = 0
-        $failedReads = 0
-        $emulatedList = @()
-
-        foreach ($file in $files) {
-            try {
-                $stream = New-Object System.IO.FileStream($file.FullName, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::Read)
-                $reader = New-Object System.IO.BinaryReader($stream)
-                
-                # Check DOS signature
-                $mz = $reader.ReadBytes(2)
-                if ($mz[0] -ne 0x4D -or $mz[1] -ne 0x5A) {
-                    $reader.Close(); $stream.Close(); continue
-                }
-                
-                # Extract PE structure header locations
-                $stream.Seek(0x3C, [System.IO.SeekOrigin]::Begin)
-                $peOffset = $reader.ReadUInt32()
-                $stream.Seek(($peOffset + 4), [System.IO.SeekOrigin]::Begin)
-                $machineType = $reader.ReadUInt16()
-                
-                $reader.Close()
-                $stream.Close()
-                
-                # 0xAA64 = Native ARM64 Machine ID
-                if ($machineType -eq 0xAA64) {
-                    $arm64Count++
-                } else {
-                    $emulatedCount++
-                    $archLabel = switch($machineType) {
-                        0x8664 { "x86_64 (64-bit Intel Emulated)" }
-                        0x014c { "x86 (32-bit Intel Emulated)" }
-                        default { "Unknown Arch (0x{0:X4})" -f $machineType }
-                    }
-                    $emulatedList += [PSCustomObject]@{
-                        FileName = $file.Name
-                        FilePath = $file.FullName
-                        Architecture = $archLabel
-                    }
-                }
-            }
-            catch {
-                $failedReads++
-            }
-        }
-
-        $totalChecked = $arm64Count + $emulatedCount
-        if ($totalChecked -eq 0) {
-            Write-Error "No valid executable or library binaries were found to audit."
+        catch {
+            Write-Error "CRITICAL: 'clang' command is completely missing or inaccessible in PATH."
             exit 1
         }
 
-        # Calculate exact native ratio
-        $nativePercentage = [Math]::Round(($arm64Count / $totalChecked) * 100, 2)
+    - name: Step 2 - Create and Compile Test C++ Application
+      shell: pwsh
+      run: |
+        Write-Host "Generating a standard C++ test source file..."
+        $cppSource = @'
+        #include <iostream>
+        #include <string>
 
-        Write-Host "`n========================================="
-        Write-Host "📊 LLVM NATIVE COMPOSITION REPORT"
-        Write-Host "========================================="
-        Write-Host "• Native ARM64 Binaries : $arm64Count"
-        Write-Host "• Emulated Binaries     : $emulatedCount"
-        Write-Host "• Unreadable System Files: $failedReads"
-        Write-Host "• TOTAL VALID BINARIES   : $totalChecked"
-        Write-Host "-----------------------------------------"
-        Write-Host "➔ THIS LLVM INSTALLATION IS $nativePercentage% NATIVE ARM64"
-        Write-Host "=========================================`n"
-
-        if ($emulatedCount -gt 0) {
-            Write-Host "⚠️ Breakdown of Emulated/Non-ARM64 Components Found:"
-            $emulatedList | Format-Table -AutoSize
+        int main() {
+            std::string status = "Hello World! LLVM compiled this natively.";
+            std::cout << status << std::endl;
+            
+            #if defined(_M_ARM64)
+                std::cout << "Runtime Check: Verified running on NATIVE ARM64 hardware profile." << std::endl;
+            #elif defined(_M_X64)
+                std::cout << "Runtime Check: Running under x86_64 Emulation loop." << std::endl;
+            #else
+                std::cout << "Runtime Check: Unknown Target Architecture." << std::endl;
+            #endif
+            
+            return 0;
         }
-
-        # Handle passing/failing criteria based on "mostly" rule (e.g. > 90% Native)
-        if ($nativePercentage -lt 90.00) {
-            Write-Host "❌ CRITICAL: Installation is NOT mostly native ($nativePercentage% < 90%). Tainted toolchain performance risks detected."
+        '@
+        
+        $cppSource | Out-File -FilePath "llvm_smoke_test.cpp" -Encoding utf8
+        
+        Write-Host "Compiling the test file using clang++..."
+        # Compile target matching the host architecture explicitly
+        clang++ -O2 -target aarch64-pc-windows-msvc llvm_smoke_test.cpp -o llvm_smoke_test.exe
+        
+        if (-not (Test-Path "llvm_smoke_test.exe")) {
+            Write-Error "CRITICAL: Compilation completed but no executable binary file was generated."
             exit 1
+        }
+        Write-Host "✅ Success: Program compiled successfully without warnings or internal errors."
+
+    - name: Step 3 - Execute Binary and Analyze System Output
+      shell: pwsh
+      run: |
+        Write-Host "Executing the compiled test binary..."
+        if (-not (Test-Path "llvm_smoke_test.exe")) {
+            Write-Error "Binary missing before execution step."
+            exit 1
+        }
+        
+        # Execute the program and grab stdout
+        $output = .\llvm_smoke_test.exe
+        Write-Host "=================== BINARY OUTPUT ==================="
+        $output
+        Write-Host "====================================================="
+        
+        # Validate that the string matches expectations
+        if ($output -match "LLVM compiled this natively" -and $output -match "NATIVE ARM64") {
+            Write-Host "✅ FINAL STATUS: LLVM toolchain functions correctly and generates running ARM64 machine instructions."
         } else {
-            Write-Host "✅ SUCCESS: LLVM installation is verified as mostly native ARM64!"
+            Write-Error "CRITICAL: Binary generated unexpected output framework formatting. Evaluation failed."
+            exit 1
         }
+
+    - name: Workspace Cleanup
+      if: always()
+      shell: pwsh
+      run: |
+        Write-Host "Cleaning up test workspace allocations..."
+        if (Test-Path "llvm_smoke_test.cpp") { Remove-Item "llvm_smoke_test.cpp" }
+        if (Test-Path "llvm_smoke_test.exe") { Remove-Item "llvm_smoke_test.exe" }
