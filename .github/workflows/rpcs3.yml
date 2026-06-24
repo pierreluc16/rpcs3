@@ -1,31 +1,13 @@
-name: Test Clang-Sys Clean State
+name: Only Test It
 
-on:
-  workflow_dispatch: # Allows manual trigger from your GitHub UI
-  push:
-    branches: [ main, master ]
+on: [push, workflow_dispatch]
 
 jobs:
-  check-vanilla-runner:
+  test:
     runs-on: ubuntu-24.04-arm
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Fresh Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Generate Isolated Project
-        # Creates a blank Rust library with only the target crate version
+      - name: Check Cargo Clang Error
         run: |
-          cargo new --lib sandbox-test
-          cd sandbox-test
-          echo 'clang-sys = "=1.8.1"' >> Cargo.toml
-
-      - name: Trigger Compilation Test
-        # Clears any internal cache and runs an isolated check
-        run: |
-          cd sandbox-test
-          cargo clean
-          cargo check --verbose
+          # If llvm-config is missing, this step immediately fails (red)
+          llvm-config --version
