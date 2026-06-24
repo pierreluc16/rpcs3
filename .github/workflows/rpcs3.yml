@@ -40,8 +40,6 @@ jobs:
           echo "          UBUNTU 24.04 ARM REALITY-CHECK RESULTS          "
           echo "=========================================================="
           
-          if [ "${{ Azure_or_Github_runner_environment }}" != "" ]; then echo ""; fi # Spacer
-          
           if [ "${{ steps.build_execution.outcome }}" = "success" ]; then
             echo "✅ BOTH ERRORS RESOLVED!"
             echo "The native ubuntu-24.04-arm image now possesses valid Clang binaries."
