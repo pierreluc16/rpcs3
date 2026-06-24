@@ -1,59 +1,31 @@
-name: Audit Clang-Sys Native Error on Ubuntu ARM
+name: Test Clang-Sys Clean State
 
 on:
+  workflow_dispatch: # Allows manual trigger from your GitHub UI
   push:
-    branches: [ "main", "master" ]
-  workflow_dispatch:
+    branches: [ main, master ]
 
 jobs:
-  test-native-state:
+  check-vanilla-runner:
     runs-on: ubuntu-24.04-arm
 
     steps:
-      - name: Checkout Repository
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install Rust Toolchain
+      - name: Setup Fresh Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Attempt Compilation and Capture Output
+      - name: Generate Isolated Project
+        # Creates a blank Rust library with only the target crate version
         run: |
-          echo "=== [START] LAUNCHING COMPILATION ON CLEAN ENVIRONMENT ==="
-          
-          # Run compilation and redirect all outputs (stdout + stderr) into a log file.
-          # The "|| true" preventing the pipeline from instantly crashing.
-          cargo build --verbose > build_output.log 2>&1 || true
-          
-          # Display the full log in the pipeline UI for inspection
-          cat build_output.log
+          cargo new --lib sandbox-test
+          cd sandbox-test
+          echo 'clang-sys = "=1.8.1"' >> Cargo.toml
 
-      - name: Assert Error Signature
+      - name: Trigger Compilation Test
+        # Clears any internal cache and runs an isolated check
         run: |
-          echo "=== [START] ANALYZING ERROR SIGNATURES ==="
-          
-          ERROR_FOUND=0
-          
-          # Check for the llvm-config warning
-          if grep -q "could not execute llvm-config" build_output.log; then
-              echo "[DETECTED] Warning: 'could not execute llvm-config' is present."
-              ERROR_FOUND=1
-          fi
-          
-          # Check for the libclang shared library crash
-          if grep -q "couldn't find any valid shared libraries matching" build_output.log; then
-              echo "[DETECTED] Panic: 'couldn't find any valid shared libraries' is present."
-              ERROR_FOUND=1
-          fi
-
-          # Evaluate test findings
-          if [ "$ERROR_FOUND" -eq 1 ]; then
-              echo "=================================================="
-              echo "[AUDIT RESULT] CONFIRMED: The error still occurs natively."
-              echo "=================================================="
-              exit 0
-          else
-              echo "=================================================="
-              echo "[AUDIT RESULT] UNEXPECTED: The error signature was not found."
-              echo "=================================================="
-              exit 1
-          fi
+          cd sandbox-test
+          cargo clean
+          cargo check --verbose
