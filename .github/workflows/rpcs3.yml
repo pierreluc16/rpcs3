@@ -5,7 +5,6 @@ on:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
-  # Allows manual triggering from the Actions tab UI
   workflow_dispatch:
 
 jobs:
@@ -15,6 +14,9 @@ jobs:
     steps:
     - name: Checkout Code
       uses: actions/checkout@v4
+      with:
+        # Prevents the Cargo.toml missing error by structuring the code inside the rpcs3 directory
+        path: rpcs3
 
     - name: Set up Rust Toolchain
       uses: dtolnay/rust-toolchain@stable
@@ -29,5 +31,6 @@ jobs:
         find /usr/lib /usr/local/lib /lib -name "libclang.so*" 2>/dev/null || true
 
     - name: Execute Cargo Check
-      # Running this without environment variables will reproduce your exact errors if they still exist
+      working-directory: rpcs3
+      # Raw execution with no installation and no overrides to check if the errors still occur
       run: cargo check -p clang-sys --verbose
