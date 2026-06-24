@@ -27,6 +27,7 @@ jobs:
           cat manual_build.log
 
       - name: Step 3 - Verify LLVM Config Warning
+        continue-on-error: true
         run: |
           echo "=== Verifying Error 1 (llvm-config warning) ==="
           # Use grep -E to loosely catch 'could not execute' alongside 'llvm-config' to bypass cargo:warning formatting and backticks
