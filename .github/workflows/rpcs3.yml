@@ -1,96 +1,51 @@
-name: Windows 11 ARM LLVM Functional Verification
+name: Test LLVM LoadLibraryExW Error Only
 
 on:
   push:
     branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
   workflow_dispatch:
 
 jobs:
-  test-llvm-functionality:
+  test-reproduction:
+    # Target GitHub's official Windows 11 ARM hosted runner
     runs-on: windows-11-arm
-    
+
     steps:
-    - name: Checkout repository
+    - name: Checkout Repository
       uses: actions/checkout@v4
 
-    - name: Step 1 - Check LLVM System Availability
+    - name: Test Pre-installed libclang (Expect LoadLibrary Failure)
       shell: pwsh
       run: |
-        Write-Host "Checking if Clang responds to basic CLI flags..."
-        try {
-            clang --version
-            Write-Host "✅ Success: clang CLI is accessible in PATH."
-        }
-        catch {
-            Write-Error "CRITICAL: 'clang' command is completely missing or inaccessible in PATH."
+        $dllPath = "C:\Program Files\LLVM\bin\libclang.dll"
+        Write-Host "Targeting Pre-installed Path: $dllPath"
+        
+        if (-not (Test-Path $dllPath)) {
+            Write-Error "Pre-installed LLVM not found at default location: $dllPath"
             exit 1
         }
 
-    - name: Step 2 - Create and Compile Test C++ Application
-      shell: pwsh
-      run: |
-        Write-Host "Generating a standard C++ test source file..."
-        $cppSource = @'
-        #include <iostream>
-        #include <string>
+        # Define native Windows kernel32 LoadLibraryExW method signature via P/Invoke
+        $signature = '[DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)] public static extern IntPtr LoadLibraryExW(string lpLibFileName, IntPtr hFile, uint dwFlags);'
+        $type = Add-Type -MemberDefinition $signature -Name "Kernel32" -Namespace "Win32" -PassThru
 
-        int main() {
-            std::string status = "Hello World! LLVM compiled this natively.";
-            std::cout << status << std::endl;
+        Write-Host "Invoking native ARM64 LoadLibraryExW on the emulated x86_64 DLL..."
+        # 0x00000008 = LOAD_WITH_ALTERED_SEARCH_PATH (Simulates how rust bindgen / clang-sys loads libraries)
+        $handle = $type::LoadLibraryExW($dllPath, [IntPtr]::Zero, 0x00000008)
+
+        if ($handle -eq [IntPtr]::Zero) {
+            $errorCode = [System.Runtime.InteropServices.Marshal]::GetLastWin32Error()
+            Write-Host "❌ BUG REPRODUCED SUCCESSFULLY!"
+            Write-Host "LoadLibraryExW failed precisely as reported in actions/runner-images#14085."
+            Write-Host "System Win32 Error Code: $errorCode (Error 193 = ERROR_BAD_EXE_FORMAT / Not a valid Win32 application)"
             
-            #if defined(_M_ARM64)
-                std::cout << "Runtime Check: Verified running on NATIVE ARM64 hardware profile." << std::endl;
-            #elif defined(_M_X64)
-                std::cout << "Runtime Check: Running under x86_64 Emulation loop." << std::endl;
-            #else
-                std::cout << "Runtime Check: Unknown Target Architecture." << std::endl;
-            #endif
-            
-            return 0;
-        }
-        '@
-        
-        $cppSource | Out-File -FilePath "llvm_smoke_test.cpp" -Encoding utf8
-        
-        Write-Host "Compiling the test file using clang++..."
-        # Compile target matching the host architecture explicitly
-        clang++ -O2 -target aarch64-pc-windows-msvc llvm_smoke_test.cpp -o llvm_smoke_test.exe
-        
-        if (-not (Test-Path "llvm_smoke_test.exe")) {
-            Write-Error "CRITICAL: Compilation completed but no executable binary file was generated."
+            # Force step failure to mark the test run as failed due to the bug
             exit 1
-        }
-        Write-Host "✅ Success: Program compiled successfully without warnings or internal errors."
-
-    - name: Step 3 - Execute Binary and Analyze System Output
-      shell: pwsh
-      run: |
-        Write-Host "Executing the compiled test binary..."
-        if (-not (Test-Path "llvm_smoke_test.exe")) {
-            Write-Error "Binary missing before execution step."
-            exit 1
-        }
-        
-        # Execute the program and grab stdout
-        $output = .\llvm_smoke_test.exe
-        Write-Host "=================== BINARY OUTPUT ==================="
-        $output
-        Write-Host "====================================================="
-        
-        # Validate that the string matches expectations
-        if ($output -match "LLVM compiled this natively" -and $output -match "NATIVE ARM64") {
-            Write-Host "✅ FINAL STATUS: LLVM toolchain functions correctly and generates running ARM64 machine instructions."
         } else {
-            Write-Error "CRITICAL: Binary generated unexpected output framework formatting. Evaluation failed."
-            exit 1
+            Write-Host "⚠️ Unexpected Success: The pre-installed library loaded without issue."
+            
+            # Clean up handle if it unexpectedly passed
+            $freeSignature = '[DllImport("kernel32.dll", SetLastError = true)] public static extern bool FreeLibrary(IntPtr hModule);'
+            $freeType = Add-Type -MemberDefinition $freeSignature -Name "Kernel32Free" -Namespace "Win32" -PassThru
+            $freeType::FreeLibrary($handle) | Out-Null
         }
-
-    - name: Workspace Cleanup
-      if: always()
-      shell: pwsh
-      run: |
-        Write-Host "Cleaning up test workspace allocations..."
-        if (Test-Path "llvm_smoke_test.cpp") { Remove-Item "llvm_smoke_test.cpp" }
-        if (Test-Path "llvm_smoke_test.exe") { Remove-Item "llvm_smoke_test.exe" }
