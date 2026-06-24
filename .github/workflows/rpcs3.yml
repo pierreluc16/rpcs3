@@ -1,4 +1,4 @@
-name: Check libicu70 Presence on Ubuntu 24.04
+name: Detect All Installed libicu Versions
 
 on:
   push:
@@ -8,28 +8,36 @@ on:
   workflow_dispatch:
 
 jobs:
-  detect-dependency:
+  audit-icu-versions:
     runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Detect libicu70
+      - name: Scan and List All Installed libicu Packages
         run: |
-          TARGET_PKG="libicu70"
+          echo "=== [START] SCANNING ALL INSTALLED LIBICU VERSIONS ==="
           
-          echo "=== [START] DETECTION WORKFLOW FOR UBUNTU 24.04 ==="
-          echo "[INFO] Vérification de la présence de $TARGET_PKG..."
-          
-          if dpkg -s "$TARGET_PKG" >/dev/null 2>&1; then
-              VERSION=$(dpkg-query -W -f='${Version}' "$TARGET_PKG")
-              echo "[OK] $TARGET_PKG est installé sur le runner (Version : $VERSION)."
-              echo "=== [SUCCESS] WORKFLOW PASSED ==="
+          # Interrogation de dpkg-query filtrée sur les paquets contenant "libicu"
+          # Le format d'affichage montre : Nom du paquet | Version | Statut d'installation
+          if dpkg-query -W -f='${Status} ${Package} ${Version}\n' "*libicu*" 2>/dev/null | grep "ok installed" > temp_icu.txt; then
+              
+              echo "[INFO] Paquets libicu détectés sur le système :"
+              echo "--------------------------------------------------"
+              
+              # Parcours et mise en forme propre des résultats
+              while read -r status1 status2 status3 package version; do
+                  echo "-> Paquet  : $package"
+                  echo "   Version : $version"
+                  echo "--------------------------------------------------"
+              done < temp_icu.txt
+              
+              rm temp_icu.txt
+              echo "=== [SUCCESS] SCAN COMPLETE ==="
               exit 0
           else
-              echo "[ERREUR] $TARGET_PKG est ABSENT de ce système."
-              echo "[NOTE] Ubuntu 24.04 n'intègre que libicu74 par défaut."
-              echo "=== [FAILURE] WORKFLOW FAILED ==="
-              exit 1
+              echo "[ALERTE] Aucun paquet correspondant à '*libicu*' n'est actuellement installé."
+              echo "=== [SUCCESS] SCAN COMPLETE ==="
+              exit 0
           fi
