@@ -25,19 +25,16 @@ jobs:
         echo "🚀 STEP 1: INITIAL DEPLOYMENT & COHERENCY CHECK"
         echo "========================================================"
         
-        # Enforce clean package state up front to prevent missing dependencies
         echo "Updating apt caches and enforcing toolchain baseline..."
         sudo apt-get update -y
         sudo apt-get install -y libicu-dev icu-devtools pkg-config build-essential file
 
-        # Extract system configuration flags
+        # Safely extract system configuration paths
         ICU_VERSION=$(pkg-config --modversion icu-i18n)
         CFLAGS=$(pkg-config --cflags icu-i18n)
-        LIBS=$(pkg-config --libs icu-i18n icu-uc)
 
         echo "• Detected ICU Version : $ICU_VERSION"
         echo "• Compiler Flags       : $CFLAGS"
-        echo "• Linker Flags         : $LIBS"
 
         echo -e "\n========================================================"
         echo "🔍 STEP 2: FILE SYSTEM PATHS & DEEP BINARY AUDIT"
@@ -62,6 +59,7 @@ jobs:
             BIN_INFO=$(file "$REAL_SO_FILE")
             echo "  ➔ Binary Metadata: $BIN_INFO"
             
+            # Architecture matching rule for standard virtual instances
             if [[ "$BIN_INFO" == *"x86-64"* || "$BIN_INFO" == *"aarch64"* ]]; then
                 echo "  ✅ Architecture Verification Passed."
             else
@@ -102,8 +100,8 @@ int main() {
 EOF
 
         echo "• Compiling test verification binary..."
-        # Explicit addition of standard library bindings to prevent linkage failure
-        g++ icu_test.cpp -o icu_test_runtime $CFLAGS $LIBS -lpthread -ldl
+        # FIX: Explicit addition of standard Ubuntu 24.04 library components to prevent linkage failure
+        g++ icu_test.cpp -o icu_test_runtime $CFLAGS -licui18n -licuuc -licudata -lpthread -ldl
 
         echo "• Running execution test..."
         ./icu_test_runtime
