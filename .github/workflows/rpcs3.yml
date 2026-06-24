@@ -12,14 +12,8 @@ jobs:
     runs-on: ubuntu-24.04-arm
 
     steps:
-      - name: 📥 Checkout repository
-        uses: actions/checkout@v4
-
-      - name: 🔍 Locate Pre-installed LLVM and LibClang Toolchain
+      - name: 🔍 Locate pre-installed llvm-config
         run: |
-          echo "=================================================="
-          echo "🔎 STEP 1: Locating llvm-config..."
-          echo "=================================================="
           LLVM_CONF=$(which llvm-config-18 || which llvm-config-19 || which llvm-config-17 || which llvm-config)
           
           if [ -z "$LLVM_CONF" ]; then
@@ -29,13 +23,12 @@ jobs:
           
           echo "✅ Success: Found llvm-config at $LLVM_CONF"
           $LLVM_CONF --version
-          echo "LLVM_CONFIG_PATH=$LLVM_CONF" >> $GITHUB_ENV
           
-          echo ""
-          echo "=================================================="
-          echo "🔎 STEP 2: Locating libclang.so..."
-          echo "=================================================="
-          LIBCLANG_FILE=$(find /usr/lib/aarch64-linux-gnu /usr/lib -name "libclang.so*" 2>/dev/null | sort -V -r | head -n 1)
+          echo "LLVM_CONFIG_PATH=$LLVM_CONF" >> $GITHUB_ENV
+
+      - name: 📂 Locate pre-installed libclang.so
+        run: |
+          LIBCLANG_FILE=$(find /usr/lib/aarch64-linux-gnu /usr/lib -name "libclang.so*" 2>/dev/null | head -n 1)
           
           if [ -z "$LIBCLANG_FILE" ]; then
             echo "❌ Error: libclang.so shared object could not be found."
@@ -44,12 +37,9 @@ jobs:
           
           LIBCLANG_DIR=$(dirname "$LIBCLANG_FILE")
           echo "✅ Success: LibClang directory found at $LIBCLANG_DIR"
-          echo "💡 Absolute file path: $LIBCLANG_FILE"
           
           echo "LIBCLANG_PATH=$LIBCLANG_DIR" >> $GITHUB_ENV
           echo "LD_LIBRARY_PATH=$LIBCLANG_DIR:$LD_LIBRARY_PATH" >> $GITHUB_ENV
-          
-          echo ""
-          echo "=================================================="
-          echo "🎉 Verification successfully completed!"
-          echo "=================================================="
+
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
