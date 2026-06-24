@@ -1,58 +1,55 @@
-name: Ultimate Clang Error Test
+name: Test LLVM and Clang Errors From Scratch
 
-on: [push, workflow_dispatch]
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
 
 jobs:
-  test-both-errors:
-    runs-on: ubuntu-24.04-arm
+  assert-errors:
+    runs-on: ubuntu-24.04-arm64
 
     steps:
-      - name: Replicate Rust Clang-Sys Behavior
-        id: diagnostic
-        run: |
-          ERROR_1=false
-          ERROR_2=false
+    - name: Step 1 - Checkout repository code
+      uses: actions/checkout@v4
 
-          echo "=================================================="
-          echo "🔍 TESTING ERROR 1: llvm-config Execution"
-          echo "=================================================="
-          # Attempt the exact command the crate failed on: "llvm-config --prefix"
-          if ! llvm-config --prefix > /dev/null 2>&1; then
-            echo "❌ ERROR 1 IS PRESENT!"
-            echo "   Reason: 'llvm-config' executable cannot be found in PATH."
-            echo "   Rust Error: (error: No such file or directory (os error 2))"
-            ERROR_1=true
-          else
-            echo "✅ ERROR 1 IS FIXED!"
-            echo "   Location: $(which llvm-config)"
-            echo "   Prefix path: $(llvm-config --prefix)"
-          fi
+    - name: Step 2 - Install clean Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
 
-          echo ""
-          echo "=================================================="
-          echo "🔍 TESTING ERROR 2: libclang Shared Library Search"
-          echo "=================================================="
-          # Scan common library directories for standard libclang files
-          LIBCLANG_FILES=$(find /usr/lib /usr/local/lib /lib -name "libclang.so" -o -name "libclang-*.so" 2>/dev/null)
-          
-          if [ -z "$LIBCLANG_FILES" ]; then
-            echo "❌ ERROR 2 IS PRESENT!"
-            echo "   Reason: No shared objects matching ['libclang.so', 'libclang-*.so'] found."
-            echo "   Rust Error: called Result::unwrap() on an Err value"
-            ERROR_2=true
-          else
-            echo "✅ ERROR 2 IS FIXED!"
-            echo "   Found matching libraries:"
-            echo "$LIBCLANG_FILES"
-          fi
+    - name: Step 3 - Run compilation and assert exact errors
+      run: |
+        # Clear environment variables to guarantee fallback mechanisms fail
+        unset LLVM_CONFIG_PATH
+        unset LIBCLANG_PATH
 
-          echo ""
-          echo "=================================================="
-          echo "📊 FINAL DIAGNOSTIC VERDICT"
-          echo "=================================================="
-          if [ "$ERROR_1" = true ] || [ "$ERROR_2" = true ]; then
-            echo "🚨 Result: Environment is BROKEN. Rust compilation will fail."
+        echo "Starting build to capture target errors..."
+        
+        # Run cargo check and save all outputs (stdout and stderr) to a log file
+        # We add '|| true' so the script doesn't crash before we can check the text
+        cargo check > build.log 2>&1 || true
+
+        # Print the logs to the GitHub console for visibility
+        cat build.log
+
+        echo "--------------------------------------------------------"
+        echo "Verifying Error 1: Missing llvm-config warning..."
+        echo "--------------------------------------------------------"
+        if grep -q "could not execute llvm-config one or more times" build.log && grep -q "error: No such file or directory (os error 2)" build.log; then
+            echo "Success: Missing llvm-config warning detected!"
+        else
+            echo "Error: The expected llvm-config warning was not found in the logs."
             exit 1
-          else
-            echo "🎉 Result: Environment is PERFECT. Ready for Cargo build."
-          fi
+        fi
+
+        echo "--------------------------------------------------------"
+        echo "Verifying Error 2: Result::unwrap() panic..."
+        echo "--------------------------------------------------------"
+        if grep -q "called Result::unwrap() on an Err value:" build.log && grep -q "couldn't find any valid shared libraries matching: \['libclang.so'" build.log; then
+            echo "Success: Result::unwrap() panic detected!"
+        else
+            echo "Error: The expected libclang shared library panic was not found."
+            exit 1
+        fi
+
+        echo "Test completed successfully. Both specific errors are confirmed present on this runner."
