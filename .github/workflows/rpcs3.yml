@@ -18,14 +18,18 @@ jobs:
     - name: Scan LLVM Folder Composition
       shell: pwsh
       run: |
+        # Auto-detect pre-installed Visual Studio LLVM path if standard layout is missing
         $llvmPath = "C:\Program Files\LLVM"
+        if (-not (Test-Path $llvmPath)) {
+            $llvmPath = "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\Llvm\ARM64"
+        }
         
         if (-not (Test-Path $llvmPath)) {
-            Write-Error "LLVM installation directory was not found at: $llvmPath"
+            Write-Error "LLVM installation directory was not found on this system configuration."
             exit 1
         }
         
-        Write-Host "🔍 Deep scanning directory mapping to analyze binary composition..."
+        Write-Host "🔍 Deep scanning directory mapping to analyze binary composition inside: $llvmPath"
         $files = Get-ChildItem -Path $llvmPath -Recurse -Include *.exe, *.dll
         
         $arm64Count = 0
@@ -41,7 +45,8 @@ jobs:
                 # Check DOS signature (MZ)
                 $mz = $reader.ReadBytes(2)
                 
-                if ($mz -ne 0x4D -and $mz -ne 0x5A) {
+                # FIX: Explicitly evaluate element indices instead of comparing an array to a single object
+                if ($mz[0] -ne 0x4D -or $mz[1] -ne 0x5A) {
                     $reader.Close(); $stream.Close(); continue
                 }
                 
@@ -78,7 +83,7 @@ jobs:
         
         $totalChecked = $arm64Count + $emulatedCount
         if ($totalChecked -eq 0) {
-            Write-Error "No valid executable or library binaries were found to audit."
+            Write-Error "No valid executable or library binaries were found to audit inside: $llvmPath"
             exit 1
         }
         
@@ -104,8 +109,8 @@ jobs:
         # --- 100% AUTOMATED RUNNER DETECTION ---
         try {
             $osInfo = Get-CimInstance -ClassName Win32_OperatingSystem
-            $detectedOS = $osInfo.Caption # Dynamically pulls e.g. "Microsoft Windows 11 Enterprise"
-            $osVersion  = $osInfo.Version # Pulls precise build number
+            $detectedOS = $osInfo.Caption 
+            $osVersion  = $osInfo.Version 
         } catch {
             $detectedOS = [System.Environment]::OSVersion.VersionString
             $osVersion  = "Unknown Build"
