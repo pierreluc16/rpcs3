@@ -5,6 +5,8 @@ on:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
+  # Enables the manual "Run workflow" button in the GitHub Actions UI
+  workflow_dispatch:
 
 jobs:
   check-env:
