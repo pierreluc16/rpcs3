@@ -9,7 +9,7 @@ jobs:
   strict-test:
     runs-on: ubuntu-24.04-arm
     
-    # Global environment variables to fix the clang-sys mapping natively
+    # Corrected global pathing from arch64 to aarch64
     env:
       LIBCLANG_PATH: /usr/lib/aarch64-linux-gnu
       LLVM_CONFIG_PATH: /usr/bin/llvm-config
