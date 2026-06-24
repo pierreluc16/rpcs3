@@ -7,13 +7,13 @@ on:
 
 jobs:
   analyze-llvm-components:
+    # Utilisation du runner officiel Windows 11 ARM de GitHub
     runs-on: windows-11-arm
 
     steps:
     - name: Checkout Repository
       uses: actions/checkout@v4
 
-    # Uses only the pre-installed file space without running an installer or any fixes
     - name: Run Recursive Binary Architecture Breakdown
       shell: pwsh
       run: |
