@@ -40,7 +40,7 @@ jobs:
         run: |
           echo "=== Searching for libclang.so ==="
           # Try to resolve path via ldconfig or find command
-          CLANG_SO_PATH=$(ldconfig -p 2>/dev/null | grep "libclang.so" | awk -F' => ' '{print $2}' | head -n 1)
+          CLANG_SO_PATH=$(ldconfig -p 2>/dev/null | grep "libclang.so" | awk -F'=> ' '{print $2}' | head -n 1)
           
           if [ -z "$CLANG_SO_PATH" ]; then
             CLANG_SO_PATH=$(sudo find /usr/lib /usr/local/lib -name "libclang.so*" | head -n 1)
