@@ -13,28 +13,62 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      # --- STEP 1: SEARCH FOR LLVM-CONFIG ---
       - name: Locate llvm-config
+        id: find-llvm
         run: |
           echo "=== Searching for llvm-config ==="
+          LLVM_PATH=""
           if command -v llvm-config &> /dev/null; then
-            echo "✅ Default llvm-config: $(which llvm-config)"
-            llvm-config --version
+            LLVM_PATH=$(which llvm-config)
           else
-            echo "❌ No default llvm-config found in PATH."
+            LLVM_PATH=$(sudo find /usr/bin /usr/local/bin -name "llvm-config*" -executable | head -n 1)
           fi
           
-          echo -e "\n=== Scanning filesystem for llvm-config variants ==="
-          sudo find /usr/bin /usr/local/bin -name "llvm-config*" 2>/dev/null || echo "No files found."
+          if [ -n "$LLVM_PATH" ]; then
+            echo "✅ Found llvm-config at: $LLVM_PATH"
+            echo "VERSION=$($LLVM_PATH --version)" >> $GITHUB_ENV
+            echo "LLVM_CONFIG_PATH=$LLVM_PATH" >> $GITHUB_ENV
+          else
+            echo "❌ No llvm-config found."
+            echo "LLVM_CONFIG_PATH=" >> $GITHUB_ENV
+          fi
 
+      # --- STEP 2: SEARCH FOR LIBCLANG.SO ---
       - name: Locate libclang.so
+        id: find-libclang
         run: |
           echo "=== Searching for libclang.so ==="
-          if ldconfig -p 2>/dev/null | grep -q "libclang"; then
-            echo "✅ Found in dynamic linker cache:"
-            ldconfig -p | grep "libclang"
-          else
-            echo "❌ Not found in ldconfig cache."
+          # Try to resolve path via ldconfig or find command
+          CLANG_SO_PATH=$(ldconfig -p 2>/dev/null | grep "libclang.so" | awk -F' => ' '{print $2}' | head -n 1)
+          
+          if [ -z "$CLANG_SO_PATH" ]; then
+            CLANG_SO_PATH=$(sudo find /usr/lib /usr/local/lib -name "libclang.so*" | head -n 1)
           fi
           
-          echo -e "\n=== Scanning filesystem for libclang.so files ==="
-          sudo find /usr/lib /usr/local/lib -name "libclang.so*" 2>/dev/null || echo "No files found."
+          if [ -n "$CLANG_SO_PATH" ]; then
+            echo "✅ Found libclang.so at: $CLANG_SO_PATH"
+            echo "LIBCLANG_SO_PATH=$CLANG_SO_PATH" >> $GITHUB_ENV
+          else
+            echo "❌ No libclang.so found."
+            echo "LIBCLANG_SO_PATH=" >> $GITHUB_ENV
+          fi
+
+      # --- STEP 3: FINAL RESULT ---
+      - name: Final Result Validation
+        run: |
+          echo "=========================================================="
+          echo "                    DIAGNOSTIC SUMMARY                    "
+          echo "=========================================================="
+          echo "LLVM Config Path:  ${LLVM_CONFIG_PATH:-NOT FOUND}"
+          echo "LLVM Version:      ${VERSION:-UNKNOWN}"
+          echo "Libclang.so Path:  ${LIBCLANG_SO_PATH:-NOT FOUND}"
+          echo "=========================================================="
+          
+          # Check if both requirements are met
+          if [ -z "$LLVM_CONFIG_PATH" ] || [ -z "$LIBCLANG_SO_PATH" ]; then
+            echo "❌ Error: Missing required LLVM or Libclang components."
+            exit 1
+          else
+            echo "🎉 Success: All required components are located and ready!"
+          fi
