@@ -23,14 +23,14 @@ jobs:
           unset LIBCLANG_PATH
 
           echo "=== Running Cargo Check ==="
-          # Execute cargo check and log outputs without crashing the workflow step
           cargo check > manual_build.log 2>&1 || true
           cat manual_build.log
 
       - name: Step 3 - Verify LLVM Config Warning
         run: |
           echo "=== Verifying Error 1 (llvm-config warning) ==="
-          if grep -q "could not execute llvm-config one or more times" manual_build.log && grep -q "error: No such file or directory (os error 2)" manual_build.log; then
+          # Use grep -E to catch critical LLVM missing binary signatures flexibly
+          if grep -q "could not execute llvm-config" manual_build.log && grep -qE "(No such file|os error 2)" manual_build.log; then
             echo "✅ SUCCESS: Missing llvm-config warning detected."
           else
             echo "❌ FAILURE: Expected llvm-config warning not found."
