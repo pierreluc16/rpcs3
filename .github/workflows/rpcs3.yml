@@ -9,10 +9,10 @@ jobs:
   strict-test:
     runs-on: ubuntu-24.04-arm
     
-    # Corrected global pathing from arch64 to aarch64
+    # Precise LLVM 18 directory mappings for Ubuntu 24.04 ARM64
     env:
-      LIBCLANG_PATH: /usr/lib/aarch64-linux-gnu
-      LLVM_CONFIG_PATH: /usr/bin/llvm-config
+      LIBCLANG_PATH: /usr/lib/llvm-18/lib
+      LLVM_CONFIG_PATH: /usr/lib/llvm-18/bin/llvm-config
 
     steps:
       - name: Check out repository
@@ -48,7 +48,7 @@ jobs:
           
           if [ "${{ steps.build_execution.outcome }}" = "success" ]; then
             echo "✅ BOTH ERRORS RESOLVED NATIVELY!"
-            echo "The image tools were successfully mapped using environment variables."
+            echo "The image tools were successfully mapped using explicit LLVM 18 paths."
             echo "You do not need to install apt packages anymore."
           else
             echo "❌ CRITICAL ERRORS ENCOUNTERED ON NATIVE IMAGE!"
@@ -56,20 +56,20 @@ jobs:
             echo ""
             
             # Sub-test 1: Check for error 1 (llvm-config missing)
-            if command -v llvm-config &> /dev/null; then
-              echo "  -> Tooling: 'llvm-config' is present. (Error 1 passed)"
+            if [ -f /usr/lib/llvm-18/bin/llvm-config ]; then
+              echo "  -> Tooling: LLVM 18 'llvm-config' is present."
             else
-              echo "  -> [FIX REQUIRED]: 'llvm-config' is missing! This caused your first error."
+              echo "  -> [FIX REQUIRED]: LLVM 18 'llvm-config' is missing at the targeted path."
             fi
             
             # Sub-test 2: Check for error 2 (libclang.so missing)
-            if ldconfig -p 2>/dev/null | grep -q "libclang"; then
-              echo "  -> Library: 'libclang.so' was detected in paths. (Error 2 passed)"
+            if [ -f /usr/lib/llvm-18/lib/libclang.so ] || [ -f /usr/lib/llvm-18/lib/libclang.so.1 ]; then
+              echo "  -> Library: 'libclang.so' variant found in LLVM 18 directory."
             else
-              echo "  -> [FIX REQUIRED]: 'libclang.so' is missing! This caused your unwrap() crash."
+              echo "  -> [FIX REQUIRED]: 'libclang.so' is missing from the LLVM 18 directory."
             fi
             
             echo ""
-            echo "Action item: If this failed, check if the paths /usr/lib/aarch64-linux-gnu or /usr/bin/llvm-config changed."
+            echo "Action item: If this failed, look at the build log above to see the new crash reason."
             exit 1
           fi
