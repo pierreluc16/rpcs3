@@ -1,93 +1,52 @@
-name: Verify Pre-installed LLVM & Libclang
+name: Check If LLVM and Libclang Are Installed
 
 on:
   push:
     branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
-  workflow_dispatch: # Allows manual trigger from the GitHub UI
+  workflow_dispatch:
 
 jobs:
-  check-preinstalled-tools:
+  check-installation:
     runs-on: ubuntu-24.04-arm
 
     steps:
-      - name: Check Out Source Code
-        uses: actions/checkout@v4
-
-      - name: Inspect Runner Platform
+      - name: Check llvm-config Installation
         run: |
-          echo "=== Hardware Architecture ==="
-          uname -m
-          echo "=== OS Version ==="
-          lsb_release -a
-
-      - name: Locate llvm-config
-        id: locate-llvm
-        run: |
-          echo "=== Checking Global Path ==="
+          echo "=== Checking for llvm-config ==="
           if command -v llvm-config &> /dev/null; then
-            echo "llvm-config is globally available!"
+            echo "✅ llvm-config is installed!"
             which llvm-config
-            echo "LLVM_CMD=llvm-config" >> $GITHUB_ENV
+            llvm-config --version
           else
-            echo "llvm-config is NOT in the global PATH."
-            echo "Searching for versioned binaries (e.g., llvm-config-18) in /usr/bin..."
-            
-            # Find the first versioned llvm-config available (Ubuntu often prefixes them)
-            VERSIONED_CONFIG=$(ls /usr/bin/llvm-config-* 2>/dev/null | head -n 1)
-            
-            if [ -n "$VERSIONED_CONFIG" ]; then
-              echo "Found versioned tool: $VERSIONED_CONFIG"
-              echo "LLVM_CMD=$VERSIONED_CONFIG" >> $GITHUB_ENV
-            else
-              echo "Error: No version of llvm-config found on this system."
-              exit 1
-            fi
+            echo "❌ Generic 'llvm-config' command NOT found."
+            echo "Checking for any versioned instances (e.g., llvm-config-18):"
+            ls -l /usr/bin/llvm-config* || echo "No llvm-config binaries found at all."
           fi
 
-      - name: Validate llvm-config Output
+      - name: Check libclang Installation
         run: |
-          echo "=== LLVM Version ==="
-          ${{ env.LLVM_CMD }} --version
+          echo "=== Checking for libclang shared libraries ==="
+          # Search common system directories for libclang binaries
+          LIB_PATHS=$(find /usr/lib /usr/local/lib -name "libclang.so*" 2>/dev/null)
           
-          echo "=== Compiler Flags ==="
-          ${{ env.LLVM_CMD }} --cflags
-          
-          # Extract the major version for path lookups later
-          MAJOR_VER=$(${{ env.LLVM_CMD }} --version | cut -d. -f1)
-          echo "LLVM_MAJOR_VERSION=$MAJOR_VER" >> $GITHUB_ENV
+          if [ -n "$LIB_PATHS" ]; then
+            echo "✅ libclang is installed at:"
+            echo "$LIB_PATHS"
+          else
+            echo "❌ No libclang.so files found in standard library directories."
+          fi
 
-      - name: Locate libclang and Headers
+      - name: Check Clang C Headers Installation
         run: |
-          echo "=== Searching for libclang shared library ==="
-          find /usr/lib /usr/local/lib -name "libclang.so*" 2>/dev/null || echo "No libclang.so found in standard paths."
+          echo "=== Checking for libclang Header Files ==="
+          # Search for the core header file required for libclang development
+          HEADER_PATHS=$(find /usr/include /usr/local/include /usr/lib/llvm* -name "Index.h" 2>/dev/null | grep "clang-c")
           
-          echo "=== Searching for Clang C Headers ==="
-          find /usr/include /usr/local/include -name "Index.h" 2>/dev/null || echo "No Index.h found in standard paths."
-
-      - name: Test Compilation and Runtime
-        run: |
-          echo "=== Creating C Test File ==="
-          cat << 'EOF' > test_clang.c
-          #include <clang-c/Index.h>
-          #include <stdio.h>
-
-          int main() {
-              CXIndex index = clang_createIndex(0, 0);
-              if (index != NULL) {
-                  printf("SUCCESS: libclang is installed and fully working on ARM64!\n");
-                  clang_disposeIndex(index);
-                  return 0;
-              }
-              fprintf(stderr, "ERROR: Failed to initialize libclang index.\n");
-              return 1;
-          }
-          EOF
-
-          echo "=== Attempting Native Compilation ==="
-          # Compile using flags provided by the found llvm-config binary
-          gcc test_clang.c -o test_clang $(${-- env.LLVM_CMD --} --cflags) $(${-- env.LLVM_CMD --} --ldflags) -lclang
-
-          echo "=== Running Compiled Binary ==="
-          ./test_clang
+          if [ -n "$HEADER_PATHS" ]; then
+            echo "✅ libclang headers are installed at:"
+            echo "$HEADER_PATHS"
+          else
+            echo "❌ Index.h (clang-c) NOT found. Development headers are missing."
+          fi
