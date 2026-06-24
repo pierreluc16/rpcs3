@@ -9,7 +9,6 @@ jobs:
   strict-test:
     runs-on: ubuntu-24.04-arm
     
-    # Target the explicit LLVM-18 directories
     env:
       LIBCLANG_PATH: /usr/lib/llvm-18/lib
       LLVM_CONFIG_PATH: /usr/lib/llvm-18/bin/llvm-config
@@ -21,22 +20,12 @@ jobs:
       - name: Install Rust Toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      # --- THE CRITICAL FIX: Link the unversioned library ---
-      - name: Fix Missing libclang.so Symlink Natively
-        run: |
-          if [ ! -f /usr/lib/llvm-18/lib/libclang.so ] && [ -f /usr/lib/llvm-18/lib/libclang.so.1 ]; then
-            echo "Creating missing symlink for clang-sys compatibility..."
-            sudo ln -s /usr/lib/llvm-18/lib/libclang.so.1 /usr/lib/llvm-18/lib/libclang.so
-          fi
-
       # --- CONSTRUCT REAL CARGO EXPERIMENT ---
       - name: Generate Dummy Project to Force Clang-Sys Probing
         run: |
           cargo new arm-clang-tester --bin
           cd arm-clang-tester
-          # Add the exact crate and version causing your original error
           echo 'clang-sys = "=1.8.1"' >> Cargo.toml
-          # Force dependency inclusion in code to ensure it compiles during build
           echo 'fn main() { unsafe { clang_sys::clang_createIndex(0, 0); } }' > src/main.rs
 
       # --- THE ULTIMATE COMPILATION TEST ---
@@ -45,7 +34,9 @@ jobs:
         continue-on-error: true
         run: |
           cd arm-clang-tester
-          cargo build --verbose
+          # Save stdout and stderr to inspect the exact errors later
+          cargo build --verbose > ../build.log 2>&1
+          cat ../build.log
 
       # --- FINAL MULTI-ERROR REPORTING SUITE ---
       - name: Evaluate Error States
@@ -54,12 +45,36 @@ jobs:
           echo "          UBUNTU 24.04 ARM REALITY-CHECK RESULTS          "
           echo "=========================================================="
           
+          # 1. Check if the whole compilation passed
           if [ "${{ steps.build_execution.outcome }}" = "success" ]; then
             echo "✅ BOTH ERRORS RESOLVED NATIVELY!"
-            echo "The compilation succeeded after creating the local symlink override."
-            echo "You do not need to install apt packages anymore."
-          else
-            echo "❌ CRITICAL ERRORS ENCOUNTERED ON NATIVE IMAGE!"
-            echo "The build still failed. Inspect the Cargo compilation logs above."
-            exit 1
+            echo "The compilation succeeded. You do not need to install apt packages anymore."
+            exit 0
           fi
+
+          echo "❌ LOG ANALYSIS FOR TARGETED CRASHES:"
+          echo ""
+
+          # 2. Check for Error 1 (llvm-config missing warning)
+          if grep -q "couldn't execute llvm-config --prefix" ../build.log; then
+            echo "❌ ERROR 1 IS STILL OCCURRING!"
+            echo "   -> Warning: clang-sys could not execute 'llvm-config'"
+          else
+            echo "✅ ERROR 1 IS FIXED!"
+            echo "   -> 'llvm-config' path warning did not trigger."
+          fi
+
+          echo ""
+
+          # 3. Check for Error 2 (libclang.so unwrap crash)
+          if grep -q "couldn't find any valid shared libraries matching" ../build.log; then
+            echo "❌ ERROR 2 IS STILL OCCURRING!"
+            echo "   -> Called Result::unwrap() on an Err value: couldn't find libclang.so"
+          else
+            echo "✅ ERROR 2 IS FIXED!"
+            echo "   -> Crate successfully bound to the shared library without unwrap() crashing."
+          fi
+
+          echo ""
+          echo "=========================================================="
+          exit 1
