@@ -24,10 +24,33 @@ jobs:
           python -m pip install --upgrade pip
           pip install pythonnet clr-loader
 
+      # STEP 1: Bypass Windows 11 OOBE and background setup prompts
+      - name: Dismiss Windows OOBE and Online Account Setup
+        shell: pwsh
+        run: |
+          $RegistryPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\OOBE"
+          if (-not (Test-Path $RegistryPath)) { 
+              New-Item -Path $RegistryPath -Force | Out-Null
+          }
+          
+          # Force network bypass and deactivate background account link prompts
+          Set-ItemProperty -Path $RegistryPath -Name "BypassNRO" -Value 1 -Type DWord -Force
+          Set-ItemProperty -Path $RegistryPath -Name "HideOnlineAccountScreens" -Value 1 -Type DWord -Force
+          
+          # Kill the background broker process if it triggered and captured the session focus
+          Stop-Process -Name "UserOOBEBroker" -Force -ErrorAction SilentlyContinue
+
+      # STEP 2: Allow Session 0 to interact with the virtual desktop context
+      - name: Configure Windows Session Interaction
+        shell: pwsh
+        run: |
+          Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Windows' -Name 'NoInteractiveServices' -Value 0 -Type DWord -Force
+
+      # STEP 3: Generate and execute the interactive PythonNet test script
       - name: Create and Run Test Script
         shell: pwsh
         run: |
-          # 1. Write runtime.json
+          # 1. Write runtime.json (.NET Core 8 for Windows Desktop ARM Architecture)
           @'
           {
             "runtimeOptions": {
@@ -42,13 +65,13 @@ jobs:
           }
           '@ | Out-File -FilePath runtime.json -Encoding utf8
 
-          # 2. Write the complete Python reproduction script
+          # 2. Write the interactive Python reproduction script
           @'
           import sys
           from pathlib import Path
           import clr_loader
           from pythonnet import set_runtime
-
+          
           def main():
               print("Initializing .NET Core runtime environment...")
               try:
@@ -57,16 +80,22 @@ jobs:
                   rt = clr_loader.get_coreclr(runtime_config=str(config_path))
                   set_runtime(rt)
                   
-                  # Import Windows Forms components
+                  # Import Windows Forms graphic components
                   import clr
                   clr.AddReference("System.Windows.Forms")
-                  from System.Windows.Forms import Form, FormCollection, Application
+                  from System.Windows.Forms import Form, Application
                   
                   print("Testing interactive UI context...")
                   test_form = Form()
+                  
+                  # Key Action: Allocate a native Win32 window handle to force GUI instantiation
+                  handle = test_form.Handle 
                   test_form.Show()
                   
-                  # If headless/non-interactive, ActiveForm evaluation or collection is null/empty
+                  # Force the message queue loop to process the window creation event
+                  Application.DoEvents()
+                  
+                  # If headless environment persists despite the bypass, ActiveForm remains None
                   if Form.ActiveForm is None:
                       print("ERROR: Non-interactive session detected! ActiveForm is None.")
                       return 1
@@ -78,10 +107,10 @@ jobs:
               except Exception as e:
                   print(f"Exception encountered during evaluation: {e}")
                   return 1
-
+                  
           if __name__ == "__main__":
               sys.exit(main())
           '@ | Out-File -FilePath demo.py -Encoding utf8
 
-          # 3. Run the generated file
+          # 3. Launch verification script
           python demo.py
