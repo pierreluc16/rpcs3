@@ -1,21 +1,49 @@
-name: Test Python Architecture Regression
+name: Verify Windows 11 ARM Python Bug
 
-on: [push, workflow_dispatch]
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch: # Allows you to trigger the test manually from the GitHub UI
 
 jobs:
-  test-launcher:
-    runs-on: windows-11-arm # Target the affected runner
+  verify-regression:
+    name: Diagnose py.exe Selection Bug
+    runs-on: windows-11-arm # Targets the Windows 11 ARM64 runner image
+    
     steps:
-      - name: Install ARM64 Python 3.13
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Native ARM64 Python 3.13
         uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-          architecture: 'arm64'
+          architecture: 'arm64' # Intentionally request native ARM64
 
-      - name: Verify Architecture Misalignment
+      - name: 1. Print Launcher Inventory (Root Cause)
+        shell: cmd
         run: |
-          echo "=== 1. Checking expected path execution ==="
-          python -c "import platform; print('Direct python executable:', platform.machine())"
-          
-          echo "=== 2. Checking py launcher execution ==="
-          py -3.13 -c "import platform; print('Py launcher selection:', platform.machine())"
+          echo === WHAT DOES PY.EXE SEE? ===
+          py -0p
+          echo ============================
+
+      - name: 2. Demonstrate the py.exe Selection Regression
+        shell: cmd
+        run: |
+          echo === TESTING PY LAUNCHER ===
+          py -3.13 -c "import platform; print('Architecture chosen by py:', platform.machine())"
+          echo ============================
+
+      - name: 3. Verify Direct Executable Behavior
+        shell: cmd
+        run: |
+          echo === TESTING DIRECT PYTHON EXECUTE ===
+          python -c "import platform; print('Architecture chosen by python:', platform.machine())"
+          echo ============================
+
+      - name: 4. Verify Explicit Architecture Suffix Fix
+        shell: cmd
+        run: |
+          echo === TESTING PY ARCHITECTURE SUFFIX ===
+          py -3.13-arm64 -c "import platform; print('Architecture with suffix:', platform.machine())"
+          echo ============================
