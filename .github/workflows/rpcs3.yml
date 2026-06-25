@@ -12,22 +12,36 @@ jobs:
     runs-on: windows-11-arm
 
     steps:
-      - name: Checkout Code Repository
+      - name: 1. Checkout Code Repository
         uses: actions/checkout@v4
 
-      - name: Setup .NET SDK (ARM64 Native)
+      - name: 2. Diagnostic File Discovery
+        shell: powershell
+        run: |
+          Write-Host "===================================================="
+          Write-Host "DIAGNOSTIC: Locating your Solution (.sln) file..."
+          Write-Host "===================================================="
+          $slnFiles = Get-ChildItem -Recurse -Filter *.sln
+          if ($slnFiles.Count -eq 0) {
+              Write-Error "No .sln file found anywhere in the repository! Ensure your code is pushed."
+          } else {
+              $slnFiles | ForEach-Object { Write-Host "Found Solution at: $($_.FullName)" }
+          }
+
+      - name: 3. Setup .NET SDK (ARM64 Native)
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '8.0.x' # Adjust to match your project version
+          dotnet-version: '8.0.x' # Adjust to match your project target (e.g., 6.0.x, 7.0.x, 8.0.x)
 
-      - name: Restore NuGet Dependencies
-        run: dotnet restore MyGuiApp.sln
+      - name: 4. Restore NuGet Dependencies
+        # Omitting the filename forces .NET to search and find the solution automatically
+        run: dotnet restore
 
-      - name: Build Test Project
-        run: dotnet build MyGuiApp.sln --configuration Release /p:Platform=ARM64
+      - name: 5. Build Test Project
+        # Compiles the discovered solution automatically for the ARM64 platform
+        run: dotnet build --configuration Release /p:Platform=ARM64
 
-      - name: Execute GUI Constraint Test
-        # We explicitly run the test we created above. 
-        # This execution will output your exact desired text results directly into the CI logs.
+      - name: 6. Execute GUI Constraint Test
+        # Executes the test suite and displays detailed logs showing your requested results
         run: |
-          dotnet test --filter "FullyQualifiedName=MyGuiApp.Tests.HeadlessEnvironmentTests.Verify_Windows11Arm_Is_Headless_And_NonInteractive" --logger "console;verbosity=detailed"
+          dotnet test --logger "console;verbosity=detailed"
