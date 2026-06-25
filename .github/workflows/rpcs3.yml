@@ -1,49 +1,11 @@
-name: Verify Windows 11 ARM Python Bug
+name: Windows 11 ARM Launcher Check
 
-on:
-  push:
-    branches: [ main ]
-  workflow_dispatch: # Allows you to trigger the test manually from the GitHub UI
+on: [push, pull_request, workflow_dispatch]
 
 jobs:
-  verify-regression:
-    name: Diagnose py.exe Selection Bug
-    runs-on: windows-11-vs2026-arm # Targets the Windows 11 ARM64 runner image
-    
+  check-inventory:
+    runs-on: windows-11-arm
+
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Setup Native ARM64 Python 3.13
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
-          architecture: 'arm64' # Intentionally request native ARM64
-
-      - name: 1. Print Launcher Inventory (Root Cause)
-        shell: cmd
-        run: |
-          echo === WHAT DOES PY.EXE SEE? ===
-          py -0p
-          echo ============================
-
-      - name: 2. Demonstrate the py.exe Selection Regression
-        shell: cmd
-        run: |
-          echo === TESTING PY LAUNCHER ===
-          py -3.13 -c "import platform; print('Architecture chosen by py:', platform.machine())"
-          echo ============================
-
-      - name: 3. Verify Direct Executable Behavior
-        shell: cmd
-        run: |
-          echo === TESTING DIRECT PYTHON EXECUTE ===
-          python -c "import platform; print('Architecture chosen by python:', platform.machine())"
-          echo ============================
-
-      - name: 4. Verify Explicit Architecture Suffix Fix
-        shell: cmd
-        run: |
-          echo === TESTING PY ARCHITECTURE SUFFIX ===
-          py -3.13-arm64 -c "import platform; print('Architecture with suffix:', platform.machine())"
-          echo ============================
+      - name: List Launcher Inventory
+        run: py -0p
