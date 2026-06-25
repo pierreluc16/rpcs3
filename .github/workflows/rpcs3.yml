@@ -1,97 +1,118 @@
-name: Reproduce Windows 11 ARM Headless Issue
+name: .NET 10 and Python 3.12 ARM64 Desktop Test
 
 on:
   push:
     branches: [ main ]
   pull_request:
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:
-  test-gui-interactivity:
+  test-desktop:
+    # Executes explicitly on the Windows 11 ARM64 GitHub hosted runner
     runs-on: windows-11-arm
+
     steps:
-      
-      - name: Checkout repository
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Set up Python 3.12
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Setup Python 3.12 (ARM64)
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+          architecture: 'arm64'
 
-      - name: Install Dependencies
+      - name: Verify Environment Prerequisites
         shell: pwsh
         run: |
-          python -m pip install --upgrade pip
-          pip install pythonnet clr-loader
+          dotnet --info
+          python --version
 
-      - name: Create and Run Test Script
-        shell: pwsh
+      - name: Create and Run Desktop Test Demo
+        shell: cmd
         run: |
-          # 1. Write runtime.json
-          @'
-          {
-            "runtimeOptions": {
-              "tfm": "net8.0-windows",
-              "frameworks": [
-                {
-                  "name": "Microsoft.WindowsDesktop.App",
-                  "version": "8.0.0"
-                }
-              ]
-            }
-          }
-          '@ | Out-File -FilePath runtime.json -Encoding utf8
+          :: 1. Create and activate a Python 3.12 virtual environment
+          py -3.12 -m venv venv
+          call venv\Scripts\activate
           
-          # 2. Write the complete Python reproduction script (FIXED UI Evaluation Logic)
-          @'
-          import sys
-          import time
-          from pathlib import Path
-          import clr_loader
-          from pythonnet import set_runtime
+          :: 2. Install Python.NET
+          py -m pip install pythonnet
           
-          def main():
-              print("Initializing .NET Core runtime environment...")
-              try:
-                  config_path = Path("runtime.json").resolve()
-                  rt = clr_loader.get_coreclr(runtime_config=str(config_path))
-                  set_runtime(rt)
-                  
-                  import clr
-                  clr.AddReference("System.Windows.Forms")
-                  from System.Windows.Forms import Form, Application
-                  
-                  print("Testing interactive UI context...")
-                  test_form = Form()
-                  test_form.Text = "CI Interactivity Test Window"
-                  
-                  # Fix: Display form window frame
-                  test_form.Show()
-                  
-                  # Fix: Explicitly pump Win32 message loop queue to allow window handle activation
-                  Application.DoEvents()
-                  time.sleep(0.5) 
-                  Application.DoEvents()
-                  
-                  # Fallback check: If ActiveForm is still None, evaluate Form open collection status
-                  active_window = Form.ActiveForm
-                  opened_forms = Application.OpenForms
-                  
-                  if active_window is None and opened_forms.Count == 0:
-                      print("ERROR: Non-interactive session detected! Desktop UI handle binding failed.")
-                      return 1
-                      
-                  print(f"SUCCESS: Interactive Windows session detected. (ActiveForm bound: {active_window is not None}, Open Count: {opened_forms.Count})")
-                  test_form.Close()
-                  return 0
-              except Exception as e:
-                  print(f"Exception encountered during evaluation: {e}")
-                  return 1
-                  
-          if __name__ == "__main__":
-              sys.exit(main())
-          '@ | Out-File -FilePath demo.py -Encoding utf8
-          
-          # 3. Run the generated file
-          python demo.py
+          :: 3. Save the unmodified target code into demo.py
+          (
+          echo import sys
+          echo from pathlib import Path
+          echo.
+          echo import clr_loader
+          echo from pythonnet import set_runtime
+          echo.
+          echo runtime_json = Path(__file__^).parent / "runtime.json"
+          echo runtime_json.write_text("""
+          echo {
+          echo   "runtimeOptions": {
+          echo     "tfm": "net10.0-windows",
+          echo     "frameworks": [
+          echo       {
+          echo         "name": "Microsoft.NETCore.App",
+          echo         "version": "10.0.0"
+          echo       },
+          echo       {
+          echo         "name": "Microsoft.WindowsDesktop.App",
+          echo         "version": "10.0.0"
+          echo       }
+          echo     ]
+          echo   }
+          echo }
+          echo """^)
+          echo set_runtime(clr_loader.get_coreclr(runtime_config=runtime_json^)^)
+          echo import clr  # noqa: E402
+          echo clr.AddReference("System.Windows.Forms"^)
+          echo import System.Windows.Forms as WinForms  # noqa: E402
+          echo.
+          echo.
+          echo def main(^):
+          echo     # Create and show a form
+          echo     form = WinForms.Form(^)
+          echo     form.Text = "Interactive Desktop Test"
+          echo     form.Show(^)
+          echo.
+          echo     # Process pending Windows messages so the form is fully realized
+          echo     WinForms.Application.DoEvents(^)
+          echo.
+          echo     # Try to activate the form
+          echo     form.Activate(^)
+          echo.    WinForms.Application.DoEvents(^)
+          echo.
+          echo     # Check if the window manager recognizes an active form
+          echo     active = WinForms.Form.ActiveForm
+          echo     print(f"Form.Visible:         {form.Visible}"^)
+          echo     print(f"Form.IsHandleCreated: {form.IsHandleCreated}"^)
+          echo     print(f"Form.ActiveForm:      {active}"^)
+          echo     print(^)
+          echo.
+          echo     if active is not None:
+          echo         print("RESULT: Interactive desktop session detected."^)
+          echo         print("        Form.ActiveForm returned the active form."^)
+          echo         rc = 0
+          echo     else:
+          echo         print("RESULT: Non-interactive session detected."^)
+          echo         print("        Form.ActiveForm returned null despite a visible form."^)
+          echo         print("        Window activation is not functional in this environment."^)
+          echo         rc = 1
+          echo.
+          echo     form.Close(^)
+          echo     form.Dispose(^)
+          echo     return rc
+          echo.
+          echo.
+          echo if __name__ == "__main__":
+          echo     sys.exit(main(^)^)
+          ) > demo.py
+
+          :: 4. Run python -m demo
+          python -m demo
