@@ -8,7 +8,7 @@ on:
 jobs:
   verify-regression:
     name: Diagnose py.exe Selection Bug
-    runs-on: windows-11-arm # Targets the Windows 11 ARM64 runner image
+    runs-on: windows-11-vs2026-arm # Targets the Windows 11 ARM64 runner image
     
     steps:
       - name: Checkout Code
