@@ -16,91 +16,118 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # The native runner image already has Python, but we target 3.12 specifically
+      # Target the required Python 3.12 version on native ARM64 architecture
       - name: Set up Python 3.12 (ARM64 Native)
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
           architecture: 'arm64'
 
-      # Verify the host is executing native ARM binaries before continuing
+      # Install .NET 10 explicitly to ensure the preview/release is present on the runner
+      - name: Setup .NET 10 Runtime Environment
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
       - name: Verify Environment Architecture
-        shell: cmd
+        shell: pwsh
         run: |
-          echo === Architecture Validation ===
-          py -3.12 -c "import platform; print('OS/Python Machine Target:', platform.machine())"
+          Write-Host "=== Architecture Validation ==="
+          python -c "import platform; print('OS/Python Machine Target:', platform.machine())"
+          dotnet --list-runtimes
           
       - name: Configure Python Virtual Environment
-        shell: cmd
+        shell: pwsh
         run: |
-          echo === Instantiating Virtual Environment ===
-          py -3.12 -m venv venv
-          call venv\Scripts\activate
+          Write-Host "=== Instantiating Virtual Environment ==="
+          python -m venv venv
+          ./venv/Scripts/Activate.ps1
           python -m pip install --upgrade pip
           python -m pip install clr_loader pythonnet
 
       - name: Generate Headless Test Script (demo.py)
-        shell: cmd
+        shell: pwsh
         run: |
-          echo === Generating demo.py ===
-          (
-          echo import sys
-          echo from pathlib import Path
-          echo import clr_loader
-          echo from pythonnet import set_runtime
-          echo runtime_json = Path(__file__^).parent / "runtime.json"
-          echo runtime_json.write_text("""
-          echo {
-          echo   "runtimeOptions": {
-          echo     "tfm": "net10.0-windows",
-          echo     "frameworks": [
-          echo       {
-          echo         "name": "Microsoft.NETCore.App",
-          echo         "version": "10.0.0"
-          echo       },
-          echo       {
-          echo         "name": "Microsoft.WindowsDesktop.App",
-          echo         "version": "10.0.0"
-          echo       }
-          echo     ]
-          echo   }
-          echo }
-          echo """, encoding="utf-8"^)
-          echo set_runtime(clr_loader.get_coreclr(runtime_config=str(runtime_json^)^)^)
-          echo import clr
-          echo clr.AddReference("System.Windows.Forms"^)
-          echo import System.Windows.Forms as WinForms
-          echo def main(^):
-          echo     form = WinForms.Form(^)
-          echo     form.Text = "Headless Desktop Test"
-          echo     form.Show(^)
-          echo     WinForms.Application.DoEvents(^)
-          echo     form.Activate(^)
-          echo     WinForms.Application.DoEvents(^)
-          echo     active = WinForms.Form.ActiveForm
-          echo     print(f"Form.Visible:         {form.Visible}"^)
-          echo     print(f"Form.IsHandleCreated: {form.IsHandleCreated}"^)
-          echo     print(f"Form.ActiveForm:      {active}"^)
-          echo     print(^)
-          echo     if form.IsHandleCreated:
-          echo         print("RESULT: Headless WinForms session verified successfully."^)
-          echo         print("        The window handle was created flawlessly under .NET 10 ARM64."^)
-          echo         if active is None:
-          echo             print("        Note: ActiveForm is None as expected in headless CI."^)
-          echo         rc = 0
-          echo     else:
-          echo         print("RESULT: Test failed. Handle creation failed."^)
-          echo         rc = 1
-          echo     form.Close(^)
-          echo     form.Dispose(^)
-          echo     return rc
-          echo if __name__ == "__main__":
-          echo     sys.exit(main(^)^)
-          ) > demo.py
+          Write-Host "=== Generating demo.py safely via Here-String ==="
+          $code = @'
+          import sys
+          from pathlib import Path
+          import clr_loader
+          from pythonnet import set_runtime
+
+          # 1. Dynamically write runtime json configuration mapping to .NET 10
+          runtime_json = Path(__file__).parent / "runtime.json"
+          runtime_json.write_text("""
+          {
+            "runtimeOptions": {
+              "tfm": "net10.0-windows",
+              "frameworks": [
+                {
+                  "name": "Microsoft.NETCore.App",
+                  "version": "10.0.0"
+                },
+                {
+                  "name": "Microsoft.WindowsDesktop.App",
+                  "version": "10.0.0"
+                }
+              ]
+            }
+          }
+          """, encoding="utf-8")
+
+          # 2. Wire up the CoreCLR bridge
+          set_runtime(clr_loader.get_coreclr(runtime_config=str(runtime_json)))
+
+          # 3. Import Windows Forms assemblies cleanly
+          import clr
+          clr.AddReference("System.Windows.Forms")
+          import System.Windows.Forms as WinForms
+
+          def main():
+              # Instantiate forms engine elements in memory
+              form = WinForms.Form()
+              form.Text = "Headless Desktop Test"
+              form.Show()
+              WinForms.Application.DoEvents()
+              
+              form.Activate()
+              WinForms.Application.DoEvents()
+              
+              active = WinForms.Form.ActiveForm
+              print(f"Form.Visible:         {form.Visible}")
+              print(f"Form.IsHandleCreated: {form.IsHandleCreated}")
+              print(f"Form.ActiveForm:      {active}")
+              print()
+              
+              # Validate via handle state since ActiveForm evaluates to None headlessly
+              if form.IsHandleCreated:
+                  print("RESULT: Headless WinForms session verified successfully.")
+                  print("        The window handle was created flawlessly under .NET 10 ARM64.")
+                  if active is None:
+                      print("        Note: ActiveForm is None as expected in headless CI.")
+                  rc = 0
+              else:
+                  print("RESULT: Test failed. Handle creation failed.")
+                  rc = 1
+                  
+              form.Close()
+              form.Dispose()
+              return rc
+
+          if __name__ == "__main__":
+              sys.exit(main())
+          '@
+          Set-Content -Path demo.py -Value $code -Encoding utf8
+
+      - name: Print Debug Script File
+        shell: pwsh
+        run: |
+          Write-Host "=== Verification of Written Script Syntax ==="
+          Get-Content demo.py
 
       - name: Execute Interop Test
-        shell: cmd
+        shell: pwsh
         run: |
-          echo === Executing Test Matrix ===
-          call venv\Scripts\activate
+          Write-Host "=== Executing Python.NET Execution Layer ==="
+          ./venv/Scripts/Activate.ps1
           python demo.py
