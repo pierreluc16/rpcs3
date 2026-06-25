@@ -19,57 +19,53 @@ jobs:
         run: |
           $ErrorActionPreference = 'Continue'
           
-          # --- Debug: capture state before we touch anything ---
-          Write-Host '::group::Processes with a visible window'
-          Get-Process | Where-Object { $_.MainWindowTitle } | Select-Object Id, ProcessName, MainWindowTitle | Format-Table -AutoSize | Out-String | Write-Host
-          Write-Host '::endgroup::'
+          Write-Host "::group::Applying OOBE & Privacy Registry Keys"
           
-          Write-Host '::group::OOBE / privacy / shell experience processes'
-          Get-Process -Name 'CloudExperienceHostBroker', 'UserOOBEBroker', 'ShellExperienceHost', 'StartMenuExperienceHost' -ErrorAction SilentlyContinue | Select-Object Id, ProcessName, MainWindowTitle, StartTime | Format-Table -AutoSize | Out-String | Write-Host
-          Write-Host '::endgroup::'
+          # Correct registry paths to fully bypass the Windows 11 First Run Experience
+          $oobePath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\OOBE"
+          $policyOobePath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\OOBE"
           
-          Write-Host '::group::Existing OOBE policy'
-          $key = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\OOBE'
-          if (Test-Path $key) {
-              Get-ItemProperty -Path $key | Out-String | Write-Host
-          } else {
-              Write-Host "Policy key '$key' does not exist."
-          }
-          Write-Host '::endgroup::'
+          # Create paths if they do not exist
+          if (!(Test-Path $oobePath)) { New-Item -Path $oobePath -Force | Out-Null }
+          if (!(Test-Path $policyOobePath)) { New-Item -Path $policyOobePath -Force | Out-Null }
           
-          # --- Suppress on any subsequent logon during this job ---
-          if (!(Test-Path $key)) { New-Item -Path $key -Force | Out-Null }
-          Set-ItemProperty -Path $key -Name 'DisablePrivacyExperience' -Type DWord -Value 1
-          Write-Host 'Set DisablePrivacyExperience=1.'
+          # Apply core system policies to suppress privacy screens and express setups
+          Set-ItemProperty -Path $oobePath -Name "DisablePrivacyExperience" -Type DWord -Value 1
+          Set-ItemProperty -Path $oobePath -Name "PrivacyConsentStatus" -Type DWord -Value 1
+          Set-ItemProperty -Path $oobePath -Name "ProtectYourPC" -Type DWord -Value 3
+          Set-ItemProperty -Path $oobePath -Name "DisableVoice" -Type DWord -Value 1
           
-          # --- Kill the process rendering the already-visible privacy screen ---
-          $targets = 'CloudExperienceHostBroker', 'UserOOBEBroker'
+          # Redundant safety configuration at the Group Policy level
+          Set-ItemProperty -Path $policyOobePath -Name "DisablePrivacyExperience" -Type DWord -Value 1
+          
+          Write-Host "OOBE Registry keys applied successfully."
+          Write-Host "::endgroup::"
+          
+          Write-Host "::group::Terminating Active Welcome UI Processes"
+          # Target processes responsible for overlaying the desktop with the privacy experience
+          $targets = @('CloudExperienceHostBroker', 'UserOOBEBroker', 'ShellExperienceHost', 'StartMenuExperienceHost')
+          
           $killed = Get-Process -Name $targets -ErrorAction SilentlyContinue
           if ($killed) {
-              $killed | ForEach-Object { Write-Host "Stopping $($_.ProcessName) (PID $($_.Id))." }
+              $killed | ForEach-Object { Write-Host "Stopping process: $($_.ProcessName) (PID $($_.Id))" }
               $killed | Stop-Process -Force -ErrorAction SilentlyContinue
           } else {
-              Write-Host 'No CloudExperienceHostBroker / UserOOBEBroker process found.'
+              Write-Host "No active OOBE background processes found."
           }
           Start-Sleep -Seconds 3
+          Write-Host "::endgroup::"
           
-          # --- Ensure the shell (explorer) is running so the desktop is available ---
-          # The privacy screen can appear before the shell starts; if so, killing it
-          # leaves a session with no desktop. Start explorer only when it is absent
-          # (do not restart a healthy shell, that would disrupt a working session).
+          Write-Host "::group::Verifying and Restoring Windows Explorer"
+          # Ensure the interactive Windows desktop (explorer.exe) is ready for GUI testing
           $explorer = Get-Process -Name 'explorer' -ErrorAction SilentlyContinue
           if ($explorer) {
-              Write-Host "explorer.exe already running (PID $($explorer.Id -join ', '))."
+              Write-Host "explorer.exe is already running (PID $($explorer.Id -join ', '))."
           } else {
-              Write-Host 'explorer.exe not running; starting it.'
+              Write-Host "explorer.exe is missing. Starting desktop interface..."
               Start-Process 'explorer.exe'
-              Start-Sleep -Seconds 3
+              Start-Sleep -Seconds 5
           }
-          
-          # --- Debug: confirm the foreground window after dismissal ---
-          Write-Host '::group::Processes with a visible window (after)'
-          Get-Process | Where-Object { $_.MainWindowTitle } | Select-Object Id, ProcessName, MainWindowTitle | Format-Table -AutoSize | Out-String | Write-Host
-          Write-Host '::endgroup::'
+          Write-Host "::endgroup::"
 
       - name: Checkout repository
         uses: actions/checkout@v4
