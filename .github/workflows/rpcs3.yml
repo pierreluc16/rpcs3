@@ -1,96 +1,33 @@
-name: Prove Windows 11 ARM Headless State
+name: Verify Windows 11 ARM Native GUI Limitations
 
 on:
   push:
     branches: [ main ]
   pull_request:
     branches: [ main ]
-  workflow_dispatch: # Allows you to run this manually from the Actions tab
+  workflow_dispatch: # Allows manual execution from the Actions tab
 
 jobs:
-  prove-session-0:
+  run-limitation-test:
     runs-on: windows-11-arm
 
     steps:
-      - name: 1. Query OS Session Architecture
-        shell: powershell
-        run: |
-          Write-Host "===================================================="
-          Write-Host " STEP 1: QUERYING WINDOWS SESSION INFO"
-          Write-Host "===================================================="
-          
-          # qwinsta displays information about Remote Desktop Services sessions.
-          # We look for active console sessions.
-          qwinsta
-          
-          # Query the specific session ID of the executing process
-          $currentSessionId = [System.Diagnostics.Process]::GetCurrentProcess().SessionId
-          Write-Host "Current Process Session ID: $currentSessionId"
-          
-          if ($currentSessionId -eq 0) {
-              Write-Host "[SUCCESSFUL TEST] Verified: Running in Session 0 (Isolated Non-Interactive Service Session)."
-          } else {
-              Write-Host "[WARNING] Running in Session $currentSessionId (Interactive Session)."
-          }
+      - name: Checkout Code Repository
+        uses: actions/checkout@v4
 
-      - name: 2. Test .NET UserInteractive Flag
-        shell: powershell
-        run: |
-          Write-Host "===================================================="
-          Write-Host " STEP 2: EVALUATING USERINTERACTIVE PROPERTY"
-          Write-Host "===================================================="
-          
-          # This framework flag returns False if the process does not have a visual UI message loop
-          $isInteractive = [Environment]::UserInteractive
-          Write-Host "Environment.UserInteractive returns: $isInteractive"
-          
-          if ($isInteractive -eq $false) {
-              Write-Host "[SUCCESSFUL TEST] Verified: Windows OS is denying interactive desktop access."
-          }
+      - name: Setup .NET SDK (ARM64 Native)
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x' # Adjust to match your project version
 
-      - name: 3. Attempt UI Canvas and Resolution Discovery
-        shell: powershell
-        run: |
-          Write-Host "===================================================="
-          Write-Host " STEP 3: TESTING VIRTUAL DISPLAY BOUNDS"
-          Write-Host "===================================================="
-          
-          # Load Windows Forms to probe the primary monitor boundaries
-          Add-Type -AssemblyName System.Windows.Forms
-          
-          try {
-              $screenWidth = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Width
-              $screenHeight = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Height
-              Write-Host "Primary Screen Bounds Reported: $screenWidth x $screenHeight"
-              
-              if ($screenWidth -eq 0 -and $screenHeight -eq 0) {
-                  Write-Host "[SUCCESSFUL TEST] Verified: Virtual Canvas display dimensions are 0x0."
-              }
-          } catch {
-              Write-Host "[SUCCESSFUL TEST] Framework crashed trying to read screen bounds. Error: $_"
-          }
+      - name: Restore NuGet Dependencies
+        run: dotnet restore MyGuiApp.sln
 
-      - name: 4. Attempt Desktop Graphics Memory Allocation
-        shell: powershell
+      - name: Build Test Project
+        run: dotnet build MyGuiApp.sln --configuration Release /p:Platform=ARM64
+
+      - name: Execute GUI Constraint Test
+        # We explicitly run the test we created above. 
+        # This execution will output your exact desired text results directly into the CI logs.
         run: |
-          Write-Host "===================================================="
-          Write-Host " STEP 4: ATTEMPTING DESKTOP GRAPHICS ENGINE BIND"
-          Write-Host "===================================================="
-          
-          # Forcing an automation tool style interaction by attempting a screen capture capture
-          Add-Type -AssemblyName System.Drawing
-          Add-Type -AssemblyName System.Windows.Forms
-          
-          try {
-              $bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
-              $bmp = New-Object System.Drawing.Bitmap $bounds.Width, $bounds.Height
-              $graphics = [System.Drawing.Graphics]::FromImage($bmp)
-              
-              # This will physically fail if the GDI device context cannot bind to a visible window station (winsta0)
-              $graphics.CopyFromScreen($bounds.X, $bounds.Y, 0, 0, $bmp.Size)
-              Write-Host "[UNEXPECTED] Successfully accessed drawing context."
-          } catch {
-              Write-Host "[SUCCESSFUL TEST] Confirmed GUI Framework Barrier!"
-              Write-Host "Graphics interaction threw expected native exception:"
-              Write-Host $_.Exception.Message
-          }
+          dotnet test --filter "FullyQualifiedName=MyGuiApp.Tests.HeadlessEnvironmentTests.Verify_Windows11Arm_Is_Headless_And_NonInteractive" --logger "console;verbosity=detailed"
