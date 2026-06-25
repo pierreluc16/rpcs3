@@ -14,8 +14,7 @@ jobs:
         # The windows-11-arm image does not suppress the Windows 11 first-logon
         # "Choose privacy settings for your device" screen. It steals foreground on the
         # interactive desktop, blocking NVDA system tests. See:
-        # https://github.com/actions/runner-images/issues/14069
-        if: matrix.runner == 'windows-11-vs2026-arm'
+        # https://github.com
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Continue'
@@ -39,7 +38,7 @@ jobs:
           Write-Host '::endgroup::'
           
           # --- Suppress on any subsequent logon during this job ---
-          New-Item -Path $key -Force | Out-Null
+          if (!(Test-Path $key)) { New-Item -Path $key -Force | Out-Null }
           Set-ItemProperty -Path $key -Name 'DisablePrivacyExperience' -Type DWord -Value 1
           Write-Host 'Set DisablePrivacyExperience=1.'
           
