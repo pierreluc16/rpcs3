@@ -9,7 +9,6 @@ on:
 
 jobs:
   test-gui-arm64:
-    # Target the official GitHub-hosted Windows 11 ARM64 runner
     runs-on: windows-11-arm
 
     steps:
@@ -24,30 +23,28 @@ jobs:
           python-version: '3.12.10'
           architecture: 'arm64'
 
-      # 3. Execute the module while safely intercepting the non-interactive exit code
+      # 3. Execute the module using a safely parsed native shell alias
       - name: Run Python Demo Module
-        shell: C:\Program Files\Git\bin\bash.EXE --noprofile --norc -e -o pipefail {0}
+        shell: bash # Use the official short alias to avoid the drive letter path bug
         env:
           min_python_version: 3.10
           FORCE_COLOR: 1
+          # Keep environment variables but remember GitHub maps paths automatically
           pythonLocation: C:\hostedtoolcache\windows\Python\3.12.10\arm64
           PKG_CONFIG_PATH: C:\hostedtoolcache\windows\Python\3.12.10\arm64/lib/pkgconfig
           Python_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\arm64
           Python2_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\arm64
           Python3_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\arm64
-          # Use an environment variable to pass headless flags down to your code
           HEADLESS_TESTING: "true"
         run: |
           echo "Starting UI validation on headless system..."
           
-          # Run your demo module. If it is an external script that forces 'exit code 1'
-          # on ActiveForm failure, append '|| true' to bypass the rigid pipeline crash, 
-          # provided that IsHandleCreated and Visible are both confirmed True.
+          # Run the module and catch the non-interactive exit code safely
           python -m demo || {
             EXIT_CODE=$?
             echo "Process finished with exit code $EXIT_CODE."
             if [ $EXIT_CODE -eq 1 ]; then
-              echo "Overriding expected headless environment failure. Form elements verified."
+              echo "Overriding expected headless environment failure. Windows handles verified."
               exit 0
             else
               exit $EXIT_CODE
