@@ -376,8 +376,8 @@ jobs:
         python -m pip install -U pip
         python -m pip install pythonnet
         
-        # Pulls from the newly checked-out toga-upstream folder containing core/ and demo/
-        python -m pip install -e ./toga-upstream/core -e ./toga-upstream/demo
+        # Pre-install editable travertino so core and demo can find the exact required dev dependency version
+        python -m pip install -e ./toga-upstream/travertino -e ./toga-upstream/core -e ./toga-upstream/demo
 
     - name: Run test
       run: |
