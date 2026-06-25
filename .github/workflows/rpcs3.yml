@@ -1,30 +1,26 @@
-name: Reproduce Runner Image Issue 14049
-
-on:
-  push:
-    branches: [ main, develop ]
-  workflow_dispatch:
+name: Reproduce Windows 11 ARM Headless Issue
+on: [push, workflow_dispatch]
 
 jobs:
-  duplicate-arm64-headless-bug:
+  reproduce-gui-bug:
     runs-on: windows-11-arm
-
     steps:
     - uses: actions/checkout@v4
-    - uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: '10.0.x'
-        include-prereqs: true 
-    - uses: actions/setup-python@v5
-      with:
-        python-version: '3.12'
-    - name: Install Deps
+    - name: Create Config and Run Test
+      shell: powershell
       run: |
-        python -m venv venv
-        .\\venv\\Scripts\\activate
+        $runtimeJson = '{"runtimeOptions": {"tfm": "net10.0-windows", "frameworks": [{"name": "Microsoft.NETCore.App", "version": "10.0.0"}]}}'
+        $runtimeJson | Out-File -FilePath "runtime.json" -Encoding utf8
+        $script = @'
+        import sys, clr_loader, clr, System.Windows.Forms as WinForms
+        from pathlib import Path
+        from pythonnet import set_runtime
+        set_runtime(clr_loader.get_coreclr(runtime_config=str(Path(__file__).parent / "runtime.json")))
+        clr.AddReference("System.Windows.Forms")
+        form = WinForms.Form()
+        form.Show()
+        print(f"Active: {WinForms.Form.ActiveForm is not None}")
+        '@
+        $script | Out-File -FilePath "demo.py" -Encoding utf8
         pip install pythonnet clr-loader
-    - name: Run Test
-      continue-on-error: true
-      run: |
-        .\\venv\\Scripts\\activate
         python demo.py
