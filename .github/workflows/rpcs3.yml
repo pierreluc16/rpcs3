@@ -1,52 +1,30 @@
-name: Python GUI Unit Test on Windows 11 ARM64
+name: Reproduce Runner Image Issue 14049
 
 on:
   push:
-    branches: [ main, master ]
-  pull_request:
-    branches: [ main, master ]
+    branches: [ main, develop ]
   workflow_dispatch:
 
 jobs:
-  test-gui-arm64:
+  duplicate-arm64-headless-bug:
     runs-on: windows-11-arm
 
     steps:
-      # 1. Pull the codebase into the runner workspace
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      # 2. Extract and mount the native Python ARM64 environment
-      - name: Set up Python (ARM64)
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12.10'
-          architecture: 'arm64'
-
-      # 3. Execute the module using a safely parsed native shell alias
-      - name: Run Python Demo Module
-        shell: bash # Use the official short alias to avoid the drive letter path bug
-        env:
-          min_python_version: 3.10
-          FORCE_COLOR: 1
-          # Keep environment variables but remember GitHub maps paths automatically
-          pythonLocation: C:\hostedtoolcache\windows\Python\3.12.10\arm64
-          PKG_CONFIG_PATH: C:\hostedtoolcache\windows\Python\3.12.10\arm64/lib/pkgconfig
-          Python_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\arm64
-          Python2_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\arm64
-          Python3_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\arm64
-          HEADLESS_TESTING: "true"
-        run: |
-          echo "Starting UI validation on headless system..."
-          
-          # Run the module and catch the non-interactive exit code safely
-          python -m demo || {
-            EXIT_CODE=$?
-            echo "Process finished with exit code $EXIT_CODE."
-            if [ $EXIT_CODE -eq 1 ]; then
-              echo "Overriding expected headless environment failure. Windows handles verified."
-              exit 0
-            else
-              exit $EXIT_CODE
-            fi
-          }
+    - uses: actions/checkout@v4
+    - uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '10.0.x'
+        include-prereqs: true 
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - name: Install Deps
+      run: |
+        python -m venv venv
+        .\\venv\\Scripts\\activate
+        pip install pythonnet clr-loader
+    - name: Run Test
+      continue-on-error: true
+      run: |
+        .\\venv\\Scripts\\activate
+        python demo.py
