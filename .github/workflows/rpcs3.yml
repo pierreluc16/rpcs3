@@ -376,7 +376,6 @@ jobs:
         python -m pip install -U pip
         python -m pip install pythonnet
         
-        # Added 'winforms' to fulfill the conditional windows requirements for Toga
         python -m pip install `
           -e ./toga-upstream/travertino `
           -e ./toga-upstream/core `
@@ -386,4 +385,4 @@ jobs:
 
     - name: Run test
       run: |
-        python -m demo
+        python -m toga_demo
