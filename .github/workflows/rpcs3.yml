@@ -20,31 +20,23 @@ jobs:
           $ErrorActionPreference = 'Continue'
           
           Write-Host "::group::Applying OOBE & Privacy Registry Keys"
-          
-          # Correct registry paths to fully bypass the Windows 11 First Run Experience
           $oobePath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\OOBE"
           $policyOobePath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\OOBE"
           
-          # Create paths if they do not exist
           if (!(Test-Path $oobePath)) { New-Item -Path $oobePath -Force | Out-Null }
           if (!(Test-Path $policyOobePath)) { New-Item -Path $policyOobePath -Force | Out-Null }
           
-          # Apply core system policies to suppress privacy screens and express setups
           Set-ItemProperty -Path $oobePath -Name "DisablePrivacyExperience" -Type DWord -Value 1
           Set-ItemProperty -Path $oobePath -Name "PrivacyConsentStatus" -Type DWord -Value 1
           Set-ItemProperty -Path $oobePath -Name "ProtectYourPC" -Type DWord -Value 3
           Set-ItemProperty -Path $oobePath -Name "DisableVoice" -Type DWord -Value 1
-          
-          # Redundant safety configuration at the Group Policy level
           Set-ItemProperty -Path $policyOobePath -Name "DisablePrivacyExperience" -Type DWord -Value 1
           
           Write-Host "OOBE Registry keys applied successfully."
           Write-Host "::endgroup::"
           
           Write-Host "::group::Terminating Active Welcome UI Processes"
-          # Target processes responsible for overlaying the desktop with the privacy experience
           $targets = @('CloudExperienceHostBroker', 'UserOOBEBroker', 'ShellExperienceHost', 'StartMenuExperienceHost')
-          
           $killed = Get-Process -Name $targets -ErrorAction SilentlyContinue
           if ($killed) {
               $killed | ForEach-Object { Write-Host "Stopping process: $($_.ProcessName) (PID $($_.Id))" }
@@ -56,7 +48,6 @@ jobs:
           Write-Host "::endgroup::"
           
           Write-Host "::group::Verifying and Restoring Windows Explorer"
-          # Ensure the interactive Windows desktop (explorer.exe) is ready for GUI testing
           $explorer = Get-Process -Name 'explorer' -ErrorAction SilentlyContinue
           if ($explorer) {
               Write-Host "explorer.exe is already running (PID $($explorer.Id -join ', '))."
@@ -99,9 +90,10 @@ jobs:
           }
           '@ | Out-File -FilePath runtime.json -Encoding utf8
           
-          # 2. Write the complete Python reproduction script
+          # 2. Write the complete Python reproduction script (FIXED UI Evaluation Logic)
           @'
           import sys
+          import time
           from pathlib import Path
           import clr_loader
           from pythonnet import set_runtime
@@ -109,26 +101,35 @@ jobs:
           def main():
               print("Initializing .NET Core runtime environment...")
               try:
-                  # Bind using local runtime config
                   config_path = Path("runtime.json").resolve()
                   rt = clr_loader.get_coreclr(runtime_config=str(config_path))
                   set_runtime(rt)
                   
-                  # Import Windows Forms components
                   import clr
                   clr.AddReference("System.Windows.Forms")
-                  from System.Windows.Forms import Form, FormCollection, Application
+                  from System.Windows.Forms import Form, Application
                   
                   print("Testing interactive UI context...")
                   test_form = Form()
+                  test_form.Text = "CI Interactivity Test Window"
+                  
+                  # Fix: Display form window frame
                   test_form.Show()
                   
-                  # If headless/non-interactive, ActiveForm evaluation or collection is null/empty
-                  if Form.ActiveForm is None:
-                      print("ERROR: Non-interactive session detected! ActiveForm is None.")
+                  # Fix: Explicitly pump Win32 message loop queue to allow window handle activation
+                  Application.DoEvents()
+                  time.sleep(0.5) 
+                  Application.DoEvents()
+                  
+                  # Fallback check: If ActiveForm is still None, evaluate Form open collection status
+                  active_window = Form.ActiveForm
+                  opened_forms = Application.OpenForms
+                  
+                  if active_window is None and opened_forms.Count == 0:
+                      print("ERROR: Non-interactive session detected! Desktop UI handle binding failed.")
                       return 1
                       
-                  print("SUCCESS: Interactive Windows session detected.")
+                  print(f"SUCCESS: Interactive Windows session detected. (ActiveForm bound: {active_window is not None}, Open Count: {opened_forms.Count})")
                   test_form.Close()
                   return 0
               except Exception as e:
