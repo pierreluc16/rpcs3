@@ -34,85 +34,85 @@ jobs:
           python --version
 
       - name: Create and Run Desktop Test Demo
-        shell: cmd
+        shell: pwsh
         run: |
-          :: 1. Create and activate a Python 3.12 virtual environment
+          # 1. Create and activate a Python 3.12 virtual environment
           py -3.12 -m venv venv
-          call venv\Scripts\activate
+          & venv\Scripts\Activate.ps1
           
-          :: 2. Install Python.NET
+          # 2. Install Python.NET
           py -m pip install pythonnet
           
-          :: 3. Save the unmodified target code into demo.py
-          (
-          echo import sys
-          echo from pathlib import Path
-          echo.
-          echo import clr_loader
-          echo from pythonnet import set_runtime
-          echo.
-          echo runtime_json = Path(__file__^).parent / "runtime.json"
-          echo runtime_json.write_text("""
-          echo {
-          echo   "runtimeOptions": {
-          echo     "tfm": "net10.0-windows",
-          echo     "frameworks": [
-          echo       {
-          echo         "name": "Microsoft.NETCore.App",
-          echo         "version": "10.0.0"
-          echo       },
-          echo       {
-          echo         "name": "Microsoft.WindowsDesktop.App",
-          echo         "version": "10.0.0"
-          echo       }
-          echo     ]
-          echo   }
-          echo }
-          echo """^)
-          echo set_runtime(clr_loader.get_coreclr(runtime_config=runtime_json^)^)
-          echo import clr  # noqa: E402
-          echo clr.AddReference("System.Windows.Forms"^)
-          echo import System.Windows.Forms as WinForms  # noqa: E402
-          echo.
-          echo.
-          echo def main(^):
-          echo     # Create and show a form
-          echo     form = WinForms.Form(^)
-          echo     form.Text = "Interactive Desktop Test"
-          echo     form.Show(^)
-          echo.
-          echo     # Process pending Windows messages so the form is fully realized
-          echo     WinForms.Application.DoEvents(^)
-          echo.
-          echo     # Try to activate the form
-          echo     form.Activate(^)
-          echo.    WinForms.Application.DoEvents(^)
-          echo.
-          echo     # Check if the window manager recognizes an active form
-          echo     active = WinForms.Form.ActiveForm
-          echo     print(f"Form.Visible:         {form.Visible}"^)
-          echo     print(f"Form.IsHandleCreated: {form.IsHandleCreated}"^)
-          echo     print(f"Form.ActiveForm:      {active}"^)
-          echo     print(^)
-          echo.
-          echo     if active is not None:
-          echo         print("RESULT: Interactive desktop session detected."^)
-          echo         print("        Form.ActiveForm returned the active form."^)
-          echo         rc = 0
-          echo     else:
-          echo         print("RESULT: Non-interactive session detected."^)
-          echo         print("        Form.ActiveForm returned null despite a visible form."^)
-          echo         print("        Window activation is not functional in this environment."^)
-          echo         rc = 1
-          echo.
-          echo     form.Close(^)
-          echo     form.Dispose(^)
-          echo     return rc
-          echo.
-          echo.
-          echo if __name__ == "__main__":
-          echo     sys.exit(main(^)^)
-          ) > demo.py
+          # 3. Save the unmodified target code into demo.py using a safe multiline string literal
+          @'
+          import sys
+          from pathlib import Path
 
-          :: 4. Run python -m demo
+          import clr_loader
+          from pythonnet import set_runtime
+
+          runtime_json = Path(__file__).parent / "runtime.json"
+          runtime_json.write_text("""
+          {
+            "runtimeOptions": {
+              "tfm": "net10.0-windows",
+              "frameworks": [
+                {
+                  "name": "Microsoft.NETCore.App",
+                  "version": "10.0.0"
+                },
+                {
+                  "name": "Microsoft.WindowsDesktop.App",
+                  "version": "10.0.0"
+                }
+              ]
+            }
+          }
+          """)
+          set_runtime(clr_loader.get_coreclr(runtime_config=runtime_json))
+          import clr  # noqa: E402
+          clr.AddReference("System.Windows.Forms")
+          import System.Windows.Forms as WinForms  # noqa: E402
+
+
+          def main():
+              # Create and show a form
+              form = WinForms.Form()
+              form.Text = "Interactive Desktop Test"
+              form.Show()
+
+              # Process pending Windows messages so the form is fully realized
+              WinForms.Application.DoEvents()
+
+              # Try to activate the form
+              form.Activate()
+              WinForms.Application.DoEvents()
+
+              # Check if the window manager recognizes an active form
+              active = WinForms.Form.ActiveForm
+              print(f"Form.Visible:         {form.Visible}")
+              print(f"Form.IsHandleCreated: {form.IsHandleCreated}")
+              print(f"Form.ActiveForm:      {active}")
+              print()
+
+              if active is not None:
+                  print("RESULT: Interactive desktop session detected.")
+                  print("        Form.ActiveForm returned the active form.")
+                  rc = 0
+              else:
+                  print("RESULT: Non-interactive session detected.")
+                  print("        Form.ActiveForm returned null despite a visible form.")
+                  print("        Window activation is not functional in this environment.")
+                  rc = 1
+
+              form.Close()
+              form.Dispose()
+              return rc
+
+
+          if __name__ == "__main__":
+              sys.exit(main())
+          '@ | Out-File -FilePath demo.py -Encoding utf8
+
+          # 4. Run python -m demo
           python -m demo
