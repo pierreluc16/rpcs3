@@ -6,29 +6,8 @@ jobs:
   check-arch:
     runs-on: windows-11-arm
     steps:
-      - name: Purge Pre-installed x64 Python from Environment
-        shell: bash
-        run: |
-          echo "=== Cleaning Up x64 Python Assets ==="
-          
-          # 1. Clear out GitHub Actions pre-cached tools if present
-          if [ -d "C:/hostedtoolcache/windows/Python" ]; then
-            rm -rf "C:/hostedtoolcache/windows/Python"
-            echo "Removed hosted tool cache directory."
-          fi
-          
-          # 2. Re-filter active PATH to exclude any legacy x64 python references
-          CLEANED_PATH=$(echo "$PATH" | tr ':' '\n' | grep -v -i "python" | grep -v -i "pip" | tr '\n' ':')
-          
-          # 3. Apply the purged path profile straight back to GitHub Actions env
-          echo "PATH=$CLEANED_PATH" >> $GITHUB_ENV
-          echo "Legacy x64 Python wiped from active pipeline paths."
-
       - name: Check System Architecture
         shell: bash
         run: |
-          echo "Python platform.machine(): $(python -c 'import platform; print(platform.machine())' 2>/dev/null || echo 'No Python Found')"
-          echo "Python platform.architecture(): $(python -c 'import platform; print(platform.architecture())' 2>/dev/null || echo 'No Python Found')"
-          echo "Python platform.processor(): $(python -c 'import platform; print(platform.processor())' 2>/dev/null || echo 'No Python Found')"
-          echo "PowerShell \$env:PROCESSOR_ARCHITECTURE: $PROCESSOR_ARCHITECTURE"
-          echo "PowerShell \$env:PROCESSOR_IDENTIFIER: $PROCESSOR_IDENTIFIER"
+          BIRTH_NATIVE_ARCH_STRING="$(uname -m)"
+          echo $BIRTH_NATIVE_ARCH_STRING
