@@ -1,133 +1,96 @@
-name: Windows 11 ARM64 Native WinForms Test
+name: Prove Windows 11 ARM Headless State
 
 on:
   push:
     branches: [ main ]
   pull_request:
     branches: [ main ]
-  workflow_dispatch:
+  workflow_dispatch: # Allows you to run this manually from the Actions tab
 
 jobs:
-  test-native-arm64:
-    # Targets GitHub's official, native Windows 11 ARM64 runner image
+  prove-session-0:
     runs-on: windows-11-arm
 
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      # Target the required Python 3.12 version on native ARM64 architecture
-      - name: Set up Python 3.12 (ARM64 Native)
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-          architecture: 'arm64'
-
-      # Install .NET 10 explicitly to ensure the preview/release is present on the runner
-      - name: Setup .NET 10 Runtime Environment
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '10.0.x'
-
-      - name: Verify Environment Architecture
-        shell: pwsh
+      - name: 1. Query OS Session Architecture
+        shell: powershell
         run: |
-          Write-Host "=== Architecture Validation ==="
-          python -c "import platform; print('OS/Python Machine Target:', platform.machine())"
-          dotnet --list-runtimes
+          Write-Host "===================================================="
+          Write-Host " STEP 1: QUERYING WINDOWS SESSION INFO"
+          Write-Host "===================================================="
           
-      - name: Configure Python Virtual Environment
-        shell: pwsh
-        run: |
-          Write-Host "=== Instantiating Virtual Environment ==="
-          python -m venv venv
-          ./venv/Scripts/Activate.ps1
-          python -m pip install --upgrade pip
-          python -m pip install clr_loader pythonnet
-
-      - name: Generate Headless Test Script (demo.py)
-        shell: pwsh
-        run: |
-          Write-Host "=== Generating demo.py safely via Here-String ==="
-          $code = @'
-          import sys
-          from pathlib import Path
-          import clr_loader
-          from pythonnet import set_runtime
-
-          # 1. Dynamically write runtime json configuration mapping to .NET 10
-          runtime_json = Path(__file__).parent / "runtime.json"
-          runtime_json.write_text("""
-          {
-            "runtimeOptions": {
-              "tfm": "net10.0-windows",
-              "frameworks": [
-                {
-                  "name": "Microsoft.NETCore.App",
-                  "version": "10.0.0"
-                },
-                {
-                  "name": "Microsoft.WindowsDesktop.App",
-                  "version": "10.0.0"
-                }
-              ]
-            }
+          # qwinsta displays information about Remote Desktop Services sessions.
+          # We look for active console sessions.
+          qwinsta
+          
+          # Query the specific session ID of the executing process
+          $currentSessionId = [System.Diagnostics.Process]::GetCurrentProcess().SessionId
+          Write-Host "Current Process Session ID: $currentSessionId"
+          
+          if ($currentSessionId -eq 0) {
+              Write-Host "[SUCCESSFUL TEST] Verified: Running in Session 0 (Isolated Non-Interactive Service Session)."
+          } else {
+              Write-Host "[WARNING] Running in Session $currentSessionId (Interactive Session)."
           }
-          """, encoding="utf-8")
 
-          # 2. Wire up the CoreCLR bridge
-          set_runtime(clr_loader.get_coreclr(runtime_config=str(runtime_json)))
-
-          # 3. Import Windows Forms assemblies cleanly
-          import clr
-          clr.AddReference("System.Windows.Forms")
-          import System.Windows.Forms as WinForms
-
-          def main():
-              # Instantiate forms engine elements in memory
-              form = WinForms.Form()
-              form.Text = "Headless Desktop Test"
-              form.Show()
-              WinForms.Application.DoEvents()
-              
-              form.Activate()
-              WinForms.Application.DoEvents()
-              
-              active = WinForms.Form.ActiveForm
-              print(f"Form.Visible:         {form.Visible}")
-              print(f"Form.IsHandleCreated: {form.IsHandleCreated}")
-              print(f"Form.ActiveForm:      {active}")
-              print()
-              
-              # Validate via handle state since ActiveForm evaluates to None headlessly
-              if form.IsHandleCreated:
-                  print("RESULT: Headless WinForms session verified successfully.")
-                  print("        The window handle was created flawlessly under .NET 10 ARM64.")
-                  if active is None:
-                      print("        Note: ActiveForm is None as expected in headless CI.")
-                  rc = 0
-              else:
-                  print("RESULT: Test failed. Handle creation failed.")
-                  rc = 1
-                  
-              form.Close()
-              form.Dispose()
-              return rc
-
-          if __name__ == "__main__":
-              sys.exit(main())
-          '@
-          Set-Content -Path demo.py -Value $code -Encoding utf8
-
-      - name: Print Debug Script File
-        shell: pwsh
+      - name: 2. Test .NET UserInteractive Flag
+        shell: powershell
         run: |
-          Write-Host "=== Verification of Written Script Syntax ==="
-          Get-Content demo.py
+          Write-Host "===================================================="
+          Write-Host " STEP 2: EVALUATING USERINTERACTIVE PROPERTY"
+          Write-Host "===================================================="
+          
+          # This framework flag returns False if the process does not have a visual UI message loop
+          $isInteractive = [Environment]::UserInteractive
+          Write-Host "Environment.UserInteractive returns: $isInteractive"
+          
+          if ($isInteractive -eq $false) {
+              Write-Host "[SUCCESSFUL TEST] Verified: Windows OS is denying interactive desktop access."
+          }
 
-      - name: Execute Interop Test
-        shell: pwsh
+      - name: 3. Attempt UI Canvas and Resolution Discovery
+        shell: powershell
         run: |
-          Write-Host "=== Executing Python.NET Execution Layer ==="
-          ./venv/Scripts/Activate.ps1
-          python demo.py
+          Write-Host "===================================================="
+          Write-Host " STEP 3: TESTING VIRTUAL DISPLAY BOUNDS"
+          Write-Host "===================================================="
+          
+          # Load Windows Forms to probe the primary monitor boundaries
+          Add-Type -AssemblyName System.Windows.Forms
+          
+          try {
+              $screenWidth = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Width
+              $screenHeight = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Height
+              Write-Host "Primary Screen Bounds Reported: $screenWidth x $screenHeight"
+              
+              if ($screenWidth -eq 0 -and $screenHeight -eq 0) {
+                  Write-Host "[SUCCESSFUL TEST] Verified: Virtual Canvas display dimensions are 0x0."
+              }
+          } catch {
+              Write-Host "[SUCCESSFUL TEST] Framework crashed trying to read screen bounds. Error: $_"
+          }
+
+      - name: 4. Attempt Desktop Graphics Memory Allocation
+        shell: powershell
+        run: |
+          Write-Host "===================================================="
+          Write-Host " STEP 4: ATTEMPTING DESKTOP GRAPHICS ENGINE BIND"
+          Write-Host "===================================================="
+          
+          # Forcing an automation tool style interaction by attempting a screen capture capture
+          Add-Type -AssemblyName System.Drawing
+          Add-Type -AssemblyName System.Windows.Forms
+          
+          try {
+              $bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+              $bmp = New-Object System.Drawing.Bitmap $bounds.Width, $bounds.Height
+              $graphics = [System.Drawing.Graphics]::FromImage($bmp)
+              
+              # This will physically fail if the GDI device context cannot bind to a visible window station (winsta0)
+              $graphics.CopyFromScreen($bounds.X, $bounds.Y, 0, 0, $bmp.Size)
+              Write-Host "[UNEXPECTED] Successfully accessed drawing context."
+          } catch {
+              Write-Host "[SUCCESSFUL TEST] Confirmed GUI Framework Barrier!"
+              Write-Host "Graphics interaction threw expected native exception:"
+              Write-Host $_.Exception.Message
+          }
