@@ -33,6 +33,53 @@ jobs:
           dotnet --info
           python --version
 
+      - name: Dismiss Windows privacy experience (windows-11-arm workaround)
+        # The windows-11-arm image does not suppress the Windows 11 first-logon
+        # "Choose privacy settings for your device" screen. It steals foreground on the
+        # interactive desktop, blocking NVDA system tests.
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          
+          Write-Host "::group::Applying OOBE & Privacy Registry Keys"
+          $oobePath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\OOBE"
+          $policyOobePath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\OOBE"
+          
+          if (!(Test-Path $oobePath)) { New-Item -Path $oobePath -Force | Out-Null }
+          if (!(Test-Path $policyOobePath)) { New-Item -Path $policyOobePath -Force | Out-Null }
+          
+          Set-ItemProperty -Path $oobePath -Name "DisablePrivacyExperience" -Type DWord -Value 1
+          Set-ItemProperty -Path $oobePath -Name "PrivacyConsentStatus" -Type DWord -Value 1
+          Set-ItemProperty -Path $oobePath -Name "ProtectYourPC" -Type DWord -Value 3
+          Set-ItemProperty -Path $oobePath -Name "DisableVoice" -Type DWord -Value 1
+          Set-ItemProperty -Path $policyOobePath -Name "DisablePrivacyExperience" -Type DWord -Value 1
+          
+          Write-Host "OOBE Registry keys applied successfully."
+          Write-Host "::endgroup::"
+          
+          Write-Host "::group::Terminating Active Welcome UI Processes"
+          $targets = @('CloudExperienceHostBroker', 'UserOOBEBroker', 'ShellExperienceHost', 'StartMenuExperienceHost')
+          $killed = Get-Process -Name $targets -ErrorAction SilentlyContinue
+          if ($killed) {
+              $killed | ForEach-Object { Write-Host "Stopping process: $($_.ProcessName) (PID $($_.Id))" }
+              $killed | Stop-Process -Force -ErrorAction SilentlyContinue
+          } else {
+              Write-Host "No active OOBE background processes found."
+          }
+          Start-Sleep -Seconds 3
+          Write-Host "::endgroup::"
+          
+          Write-Host "::group::Verifying and Restoring Windows Explorer"
+          $explorer = Get-Process -Name 'explorer' -ErrorAction SilentlyContinue
+          if ($explorer) {
+              Write-Host "explorer.exe is already running (PID $($explorer.Id -join ', '))."
+          } else {
+              Write-Host "explorer.exe is missing. Starting desktop interface..."
+              Start-Process 'explorer.exe'
+              Start-Sleep -Seconds 5
+          }
+          Write-Host "::endgroup::"
+
       - name: Create and Run Desktop Test Demo
         shell: pwsh
         run: |
@@ -43,14 +90,13 @@ jobs:
           # 2. Install Python.NET
           py -m pip install pythonnet
           
-          # 3. Save the unmodified target code into demo.py using a safe multiline string literal
+          # 3. Save the target code into demo.py using a safe multiline string literal
           @'
           import sys
           from pathlib import Path
-
           import clr_loader
           from pythonnet import set_runtime
-
+          
           runtime_json = Path(__file__).parent / "runtime.json"
           runtime_json.write_text("""
           {
@@ -69,32 +115,32 @@ jobs:
             }
           }
           """)
+          
           set_runtime(clr_loader.get_coreclr(runtime_config=runtime_json))
           import clr  # noqa: E402
           clr.AddReference("System.Windows.Forms")
           import System.Windows.Forms as WinForms  # noqa: E402
-
-
+          
           def main():
               # Create and show a form
               form = WinForms.Form()
               form.Text = "Interactive Desktop Test"
               form.Show()
-
+              
               # Process pending Windows messages so the form is fully realized
               WinForms.Application.DoEvents()
-
+              
               # Try to activate the form
               form.Activate()
               WinForms.Application.DoEvents()
-
+              
               # Check if the window manager recognizes an active form
               active = WinForms.Form.ActiveForm
               print(f"Form.Visible:         {form.Visible}")
               print(f"Form.IsHandleCreated: {form.IsHandleCreated}")
               print(f"Form.ActiveForm:      {active}")
               print()
-
+              
               if active is not None:
                   print("RESULT: Interactive desktop session detected.")
                   print("        Form.ActiveForm returned the active form.")
@@ -104,15 +150,13 @@ jobs:
                   print("        Form.ActiveForm returned null despite a visible form.")
                   print("        Window activation is not functional in this environment.")
                   rc = 1
-
               form.Close()
               form.Dispose()
               return rc
-
-
+              
           if __name__ == "__main__":
               sys.exit(main())
           '@ | Out-File -FilePath demo.py -Encoding utf8
-
+          
           # 4. Run python -m demo
           python -m demo
