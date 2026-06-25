@@ -376,10 +376,11 @@ jobs:
         python -m pip install -U pip
         python -m pip install pythonnet
         
-        # Install sequential local blocks to handle intertwined dev builds cleanly
+        # Added 'winforms' to fulfill the conditional windows requirements for Toga
         python -m pip install `
           -e ./toga-upstream/travertino `
           -e ./toga-upstream/core `
+          -e ./toga-upstream/winforms `
           -e ./toga-upstream/toga `
           -e ./toga-upstream/demo
 
