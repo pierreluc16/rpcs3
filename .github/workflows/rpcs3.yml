@@ -376,8 +376,12 @@ jobs:
         python -m pip install -U pip
         python -m pip install pythonnet
         
-        # Pre-install editable travertino so core and demo can find the exact required dev dependency version
-        python -m pip install -e ./toga-upstream/travertino -e ./toga-upstream/core -e ./toga-upstream/demo
+        # Install sequential local blocks to handle intertwined dev builds cleanly
+        python -m pip install `
+          -e ./toga-upstream/travertino `
+          -e ./toga-upstream/core `
+          -e ./toga-upstream/toga `
+          -e ./toga-upstream/demo
 
     - name: Run test
       run: |
