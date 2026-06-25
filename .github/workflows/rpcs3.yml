@@ -10,6 +10,68 @@ jobs:
   test-gui-interactivity:
     runs-on: windows-11-arm
     steps:
+      - name: 'Dismiss Windows privacy experience (windows-11-arm workaround)'
+        # The windows-11-arm image does not suppress the Windows 11 first-logon
+        # "Choose privacy settings for your device" screen. It steals foreground on the
+        # interactive desktop, blocking NVDA system tests. See:
+        # https://github.com/actions/runner-images/issues/14069
+        if: matrix.runner == 'windows-11-vs2026-arm'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          
+          # --- Debug: capture state before we touch anything ---
+          Write-Host '::group::Processes with a visible window'
+          Get-Process | Where-Object { $_.MainWindowTitle } | Select-Object Id, ProcessName, MainWindowTitle | Format-Table -AutoSize | Out-String | Write-Host
+          Write-Host '::endgroup::'
+          
+          Write-Host '::group::OOBE / privacy / shell experience processes'
+          Get-Process -Name 'CloudExperienceHostBroker', 'UserOOBEBroker', 'ShellExperienceHost', 'StartMenuExperienceHost' -ErrorAction SilentlyContinue | Select-Object Id, ProcessName, MainWindowTitle, StartTime | Format-Table -AutoSize | Out-String | Write-Host
+          Write-Host '::endgroup::'
+          
+          Write-Host '::group::Existing OOBE policy'
+          $key = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\OOBE'
+          if (Test-Path $key) {
+              Get-ItemProperty -Path $key | Out-String | Write-Host
+          } else {
+              Write-Host "Policy key '$key' does not exist."
+          }
+          Write-Host '::endgroup::'
+          
+          # --- Suppress on any subsequent logon during this job ---
+          New-Item -Path $key -Force | Out-Null
+          Set-ItemProperty -Path $key -Name 'DisablePrivacyExperience' -Type DWord -Value 1
+          Write-Host 'Set DisablePrivacyExperience=1.'
+          
+          # --- Kill the process rendering the already-visible privacy screen ---
+          $targets = 'CloudExperienceHostBroker', 'UserOOBEBroker'
+          $killed = Get-Process -Name $targets -ErrorAction SilentlyContinue
+          if ($killed) {
+              $killed | ForEach-Object { Write-Host "Stopping $($_.ProcessName) (PID $($_.Id))." }
+              $killed | Stop-Process -Force -ErrorAction SilentlyContinue
+          } else {
+              Write-Host 'No CloudExperienceHostBroker / UserOOBEBroker process found.'
+          }
+          Start-Sleep -Seconds 3
+          
+          # --- Ensure the shell (explorer) is running so the desktop is available ---
+          # The privacy screen can appear before the shell starts; if so, killing it
+          # leaves a session with no desktop. Start explorer only when it is absent
+          # (do not restart a healthy shell, that would disrupt a working session).
+          $explorer = Get-Process -Name 'explorer' -ErrorAction SilentlyContinue
+          if ($explorer) {
+              Write-Host "explorer.exe already running (PID $($explorer.Id -join ', '))."
+          } else {
+              Write-Host 'explorer.exe not running; starting it.'
+              Start-Process 'explorer.exe'
+              Start-Sleep -Seconds 3
+          }
+          
+          # --- Debug: confirm the foreground window after dismissal ---
+          Write-Host '::group::Processes with a visible window (after)'
+          Get-Process | Where-Object { $_.MainWindowTitle } | Select-Object Id, ProcessName, MainWindowTitle | Format-Table -AutoSize | Out-String | Write-Host
+          Write-Host '::endgroup::'
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -24,33 +86,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install pythonnet clr-loader
 
-      # STEP 1: Bypass Windows 11 OOBE and background setup prompts
-      - name: Dismiss Windows OOBE and Online Account Setup
-        shell: pwsh
-        run: |
-          $RegistryPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\OOBE"
-          if (-not (Test-Path $RegistryPath)) { 
-              New-Item -Path $RegistryPath -Force | Out-Null
-          }
-          
-          # Force network bypass and deactivate background account link prompts
-          Set-ItemProperty -Path $RegistryPath -Name "BypassNRO" -Value 1 -Type DWord -Force
-          Set-ItemProperty -Path $RegistryPath -Name "HideOnlineAccountScreens" -Value 1 -Type DWord -Force
-          
-          # Kill the background broker process if it triggered and captured the session focus
-          Stop-Process -Name "UserOOBEBroker" -Force -ErrorAction SilentlyContinue
-
-      # STEP 2: Allow Session 0 to interact with the virtual desktop context
-      - name: Configure Windows Session Interaction
-        shell: pwsh
-        run: |
-          Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Windows' -Name 'NoInteractiveServices' -Value 0 -Type DWord -Force
-
-      # STEP 3: Generate and execute the interactive PythonNet test script
       - name: Create and Run Test Script
         shell: pwsh
         run: |
-          # 1. Write runtime.json (.NET Core 8 for Windows Desktop ARM Architecture)
+          # 1. Write runtime.json
           @'
           {
             "runtimeOptions": {
@@ -64,8 +103,8 @@ jobs:
             }
           }
           '@ | Out-File -FilePath runtime.json -Encoding utf8
-
-          # 2. Write the interactive Python reproduction script
+          
+          # 2. Write the complete Python reproduction script
           @'
           import sys
           from pathlib import Path
@@ -80,22 +119,16 @@ jobs:
                   rt = clr_loader.get_coreclr(runtime_config=str(config_path))
                   set_runtime(rt)
                   
-                  # Import Windows Forms graphic components
+                  # Import Windows Forms components
                   import clr
                   clr.AddReference("System.Windows.Forms")
-                  from System.Windows.Forms import Form, Application
+                  from System.Windows.Forms import Form, FormCollection, Application
                   
                   print("Testing interactive UI context...")
                   test_form = Form()
-                  
-                  # Key Action: Allocate a native Win32 window handle to force GUI instantiation
-                  handle = test_form.Handle 
                   test_form.Show()
                   
-                  # Force the message queue loop to process the window creation event
-                  Application.DoEvents()
-                  
-                  # If headless environment persists despite the bypass, ActiveForm remains None
+                  # If headless/non-interactive, ActiveForm evaluation or collection is null/empty
                   if Form.ActiveForm is None:
                       print("ERROR: Non-interactive session detected! ActiveForm is None.")
                       return 1
@@ -103,7 +136,6 @@ jobs:
                   print("SUCCESS: Interactive Windows session detected.")
                   test_form.Close()
                   return 0
-                  
               except Exception as e:
                   print(f"Exception encountered during evaluation: {e}")
                   return 1
@@ -111,6 +143,6 @@ jobs:
           if __name__ == "__main__":
               sys.exit(main())
           '@ | Out-File -FilePath demo.py -Encoding utf8
-
-          # 3. Launch verification script
+          
+          # 3. Run the generated file
           python demo.py
