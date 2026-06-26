@@ -1,4 +1,4 @@
-name: ICU Check Only
+name: ICU Dependency Check
 
 on:
   push:
@@ -8,14 +8,14 @@ on:
   workflow_dispatch:
 
 jobs:
-  run-check:
+  check-icu:
     runs-on: ubuntu-26.04-arm
 
     steps:
-      - name: Checkout Code
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Run ICU Dependency Check
+      - name: Run ICU Analysis
         run: |
           echo "ニニニニニニニニ！："
           echo "=-----"
@@ -25,6 +25,7 @@ jobs:
           echo "--------"
           echo "ニニニニニニニニニニニニニ"
           
+          # [Method 1] pkg-config
           echo "[Method 1] Checking via pkg-config..."
           if pkg-config --exists icu-i18n 2>/dev/null; then
             echo "SUCCESS: icu-i18n found."
@@ -34,22 +35,25 @@ jobs:
             echo "dev is missing)."
           fi
           
+          # [Method 2] uconv
           echo "[Method 2] Checking via uconv command utility..."
           if command -v uconv &> /dev/null; then
-            echo "SUCCESS: uconv found."
+            echo "SUCCESS: uconv utility found."
           else
             echo "X uconv: Command utility not found on the system."
           fi
           
+          # [Method 3] dpkg
           echo "[Method 3] Checking via dpkg (installed packages database)..."
-          if dpkg -l | grep -q libicu; then
+          if dpkg -l | grep -q "libicu"; then
             echo "DETECTED: libicu components exist inside"
             echo "package manager database."
-            dpkg -l | grep libicu | head -n 1 | awk '{print "- " $2 " (Version: " $3 ")"}'
+            dpkg -l | grep "libicu" | head -n 1 | awk '{print "- " $2 " (Version: " $3 ")"}'
           else
-            echo "X No libicu packages found."
+            echo "X No libicu packages found via dpkg."
           fi
           
+          # [Method 4] Direct SO scanning
           echo "[Method 4] Direct system scanning for library files (.so)..."
           if ls /usr/lib/x86_64-linux-gnu/libicuuc.so* &> /dev/null; then
             echo "DETECTED: Active . so files discovered in"
@@ -58,7 +62,7 @@ jobs:
             echo "→ libicuuc.so.78.2"
             echo "- /usr/lib/x86_64-linux-gnu/libicuuc.so.78.2 →>"
           else
-            echo "X No .so files found."
+            echo "X No .so files discovered."
           fi
           
           echo "ニニニニニニニニニニニニニニニニ"
