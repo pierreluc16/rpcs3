@@ -1,4 +1,4 @@
-name: Download and Install Google Chrome ARM64
+name: Secure Download and Install US Chrome ARM64
 
 on:
   push:
@@ -6,37 +6,64 @@ on:
   workflow_dispatch:
 
 jobs:
-  install-chrome:
-    runs-on: ubuntu-24.04-arm  # Deploys on a native Linux ARM64 hardware runner
+  install-chrome-arm64:
+    runs-on: ubuntu-24.04-arm  # Explicitly runs on native ARM64 Linux runner hardware
     
     steps:
       - name: Checkout Code Repository
         uses: actions/checkout@v4
 
-      - name: Clean and Configure Secure APT Repository Pointers
+      - name: Download US Chrome Page Source via Firefox Agent
         run: |
-          # 1. Clear out old or invalid repository listings to avoid update collision crashes
+          # 1. Official USA localized portal directory URL
+          URL="https://google.com"
+          
+          # 2. Native ARM64 Mozilla Firefox User-Agent identity footprint
+          FIREFOX_USER_AGENT="Mozilla/5.0 (X11; Linux aarch64; rv:128.0) Gecko/20100101 Firefox/128.0"
+          
+          # 3. Securely fetch the landing page using custom headers to simulate a real user
+          wget --user-agent="$FIREFOX_USER_AGENT" \
+               --header="Accept-Language: en-US,en;q=0.9" \
+               --trust-server-names \
+               -O google-chrome-usa-source.html \
+               "$URL"
+
+      - name: Clean Environment and Configure Official APT Infrastructure
+        run: |
+          # Safe Cleanup: Delete prior broken or mistyped repository assets to fix index locks
           sudo rm -f /etc/apt/sources.list.d/google-chrome.list
           
-          # 2. Update system and install required cryptographic tools
           sudo apt-get update
           sudo apt-get install -y curl gnupg
           
-          # 3. Provision safe system verification directory paths
+          # Setup local path verification security keyrings
           sudo mkdir -p /usr/share/keyrings
           
-          # 4. Fetch public keys cleanly following server redirections and decode to binary GPG format
+          # Securely stream official public keys without piping invalid raw HTML text
           curl -fSsL https://google.com | gpg --dearmor | sudo tee /usr/share/keyrings/google-chrome.gpg > /dev/null
           
-          # 5. Map repository configurations explicitly to the correct Linux ARM64 target base URL
+          # Final Fix: Establish the official Chrome repository specifically targeting ARM64 builds
           echo "deb [arch=arm64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://google.com stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
 
-      - name: Refresh System Package Indexes and Install Chrome Stable
+      - name: Update System Database and Install Chrome Stable
         run: |
           sudo apt-get update
           sudo apt-get install -y google-chrome-stable
 
-      - name: Verify Installation and Version Check
+      - name: Verify Live Installation and Version Profile
         run: |
-          # Confirms the execution engine runs natively on the ARM architecture layout
+          # System validation step ensures it executes properly on your architecture layout
           google-chrome --version
+
+      - name: Lock Active Shell Pipeline Environment to English
+        run: |
+          # Sets systemic locale variables to enforce clear English terminal messaging
+          echo "LANG=en_US.UTF-8" >> $GITHUB_ENV
+          echo "LANGUAGE=en_US:en" >> $GITHUB_ENV
+
+      - name: Upload Scraped Webpage Source to Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: google-chrome-us-source
+          path: google-chrome-usa-source.html
+          retention-days: 7
