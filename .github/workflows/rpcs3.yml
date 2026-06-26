@@ -31,7 +31,7 @@ jobs:
       - name: Execute Asyncio Multiprocessing Benchmark
         timeout-minutes: 30
         run: |
-          # 1. Create a physical file to prevent the <stdin> spawn crash
+          # 1. Create a physical script file to allow proper multiprocessing 'spawn' initialization
           cat << 'EOF' > repro_test.py
           import asyncio
           import multiprocessing
@@ -69,7 +69,7 @@ jobs:
               print("--- Benchmark Finished ---")
               print(f"Total execution time: {duration:.2f} seconds")
               
-              # Write results into the GitHub Actions Step Summary
+              # Write results into the GitHub Actions Step Summary markdown panel
               summary_file = os.environ.get('GITHUB_STEP_SUMMARY')
               if summary_file:
                   with open(summary_file, 'a') as f:
@@ -92,5 +92,5 @@ jobs:
               asyncio.run(main())
           EOF
 
-          # 2. Run the actual physical file
+          # 2. Run the actual physical file safely
           python repro_test.py
