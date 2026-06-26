@@ -5,6 +5,7 @@ on:
     branches: [ main ]
   pull_request:
     branches: [ main ]
+  workflow_dispatch: # Allows manual launch button in GitHub UI
 
 jobs:
   test:
@@ -25,4 +26,4 @@ jobs:
         run: pip install -e .
         
       - name: Run tests
-        run: pytest # Replace with your project's specific test runner command
+        run: pytest # Replace with your test command
