@@ -7,45 +7,43 @@ on:
 
 jobs:
   check-inventory:
-    # Étiquette exacte certifiée par GitHub pour les runners ARM publics
     runs-on: ubuntu-24.04-arm
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # Étape de sécurité : installe l'outil 'file' pour éviter le plantage
       - name: Install System Diagnostics Tools
         run: |
           sudo apt-get update
           sudo apt-get install -y file
 
-      # Étape 1 : Obtenir l'architecture globale du système d'exploitation
       - name: System OS Architecture
         run: |
           echo "=== OS Architecture ==="
           uname -m
           dpkg --print-architecture
 
-      # Étape 2 : Détecter l'architecture propre à chaque exécutable Python trouvé
+      # ÉTAPE CORRIGÉE : Filtre strict pour exclure les scripts utilitaires de configuration
       - name: List All Python Binaries and their Native Architectures
         run: |
           echo "=== Analyzing Python Binary Structures ==="
-          for py_bin in $(ls /usr/bin/python[0-9]* 2>/dev/null); do
+          
+          # La regex exclut expressément tout fichier se terminant par '-config'
+          for py_bin in $(ls /usr/bin/python[0-9]* 2>/dev/null | grep -v '\-config$'); do
             echo "----------------------------------------"
             echo "Binary Path: $py_bin"
             
-            # Affiche la version commerciale de l'exécutable
+            # Affiche la version
             $py_bin --version 2>&1
             
-            # Analyse la structure interne de bas niveau du fichier
+            # Analyse la structure du fichier de bas niveau
             file $py_bin
             
-            # Demande à l'environnement d'exécution de rapporter son architecture cible
+            # Interroge la plateforme
             $py_bin -c "import platform; print('Python Platform Engine:', platform.machine(), platform.architecture())"
           done
 
-      # Étape 3 : Vérifier l'architecture globale enregistrée par APT
       - name: Check APT Package Architectures
         run: |
           echo "=== Installed Python System Package Architectures ==="
