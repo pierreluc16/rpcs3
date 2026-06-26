@@ -30,8 +30,9 @@ jobs:
 
       - name: Clean Environment and Configure Official APT Infrastructure
         run: |
-          # Safe Cleanup: Delete prior broken or mistyped repository assets to fix index locks
+          # CRITICAL FIX: Purge the broken google.com entries completely from ALL system apt folders
           sudo rm -f /etc/apt/sources.list.d/google-chrome.list
+          sudo sed -i '/://google.com' /etc/apt/sources.list || true
           
           sudo apt-get update
           sudo apt-get install -y curl gnupg
@@ -42,7 +43,7 @@ jobs:
           # Securely stream official public keys without piping invalid raw HTML text
           curl -fSsL https://google.com | gpg --dearmor | sudo tee /usr/share/keyrings/google-chrome.gpg > /dev/null
           
-          # Final Fix: Establish the official Chrome repository specifically targeting ARM64 builds
+          # Establish the official Chrome repository targeting the true distribution domain
           echo "deb [arch=arm64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://google.com stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
 
       - name: Update System Database and Install Chrome Stable
