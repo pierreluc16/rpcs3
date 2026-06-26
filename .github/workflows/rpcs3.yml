@@ -1,4 +1,4 @@
-name: CI Automation Tests on Ubuntu 24.04 ARM64
+name: Test Runner Issue 14086 Profile (Windows 11 ARM64)
 
 on:
   push:
@@ -7,34 +7,52 @@ on:
     branches: [ main, master ]
 
 jobs:
-  run-tests-on-arm:
-    runs-on: ubuntu-24.04-arm
+  test-issue-behavior-windows:
+    # Target the official GitHub-hosted Windows 11 ARM64 runner
+    runs-on: windows-11-arm
 
     steps:
+      # 1. Pull the codebase context
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Install System Dependencies
-        run: |
-          sudo apt update
-          sudo apt install -y wget curl xvfb libxi6 libnss3 libgbm1 libasound2t64
+      # 2. Setup the Go runtime standard environment
+      - name: Setup Go Environment
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
 
-      # Removed nested inner quotes to prevent YAML parsing and unexpected EOF errors
-      - name: Download from Google Chrome Website
+      # 3. Print the active compiler environment configurations for logging
+      - name: Inspect Pre-existing Toolchain Paths
+        shell: pwsh
         run: |
-          curl -L https://google.com -o google-chrome.deb
+          Write-Host "=== Active Go Environment ==="
+          go env
+          Write-Host "=== Windows System CC Compiler ==="
+          go env CC
+          Get-Command gcc -ErrorAction SilentlyContinue | Select-Object Name, Path
 
-      - name: Install Google Chrome ARM64
-        run: |
-          sudo apt install -y ./google-chrome.deb
-
-      - name: Verify Chrome Installation
-        run: |
-          google-chrome --version
-          which google-chrome
-
-      - name: Run E2E Headless Tests
+      # 4. Generate and test the exact failing Go/C code snippet from Issue #14086
+      - name: Reproduce CGO Compilation Step
+        # continue-on-error ensures the workflow run doesn't hard-fail when the compilation breaks
+        continue-on-error: true
+        shell: pwsh
         env:
-          CHROME_BIN: /usr/bin/google-chrome
+          CGO_ENABLED: '1'
         run: |
-          xvfb-run --server-args="-screen 0 1280x1024x24" npm test
+          # Dynamically create the exact test scenario script from the bug report
+          $code = @"
+          package main
+          
+          // int foo(){ return 0; }
+          import "C"
+          
+          func main() {
+              C.foo()
+          }
+          "@
+          
+          Set-Content -Path "bug_repro.go" -Value $code
+          
+          Write-Host "Attempting compilation on Windows 11 ARM64 to observe error profile..."
+          go build bug_repro.go
