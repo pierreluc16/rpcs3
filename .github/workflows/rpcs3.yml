@@ -16,31 +16,36 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # 2. Update packages and install modern 24.04 system utilities (libgconf removed)
+      # 2. Update packages and install modern 24.04 system utilities
       - name: Install System Dependencies
         run: |
           sudo apt update
-          sudo apt install -y wget xvfb libxi6 libnss3 libgbm1 libasound2t64
+          sudo apt install -y wget curl gnupg xvfb libxi6 libnss3 libgbm1 libasound2t64
 
-      # 3. Download and install the official stable version of Google Chrome ARM64
-      - name: Download and Install Official Google Chrome (ARM64)
+      # 3. Add Google's official signing key and package repository
+      - name: Configure Official Google Chrome Repository
         run: |
-          # Fetch the official stable ARM64 deb package provided by Google
-          wget https://google.com
+          # Download Google's official GPG signing key
+          curl -fsSL https://dl.google.com/linux/linux_signing_key.pub | sudo gpg --dearmor -o /usr/share/keyrings/google-chrome.gpg
           
-          # Install the local package while letting apt handle any 24.04 package dependencies
-          sudo apt install -y ./google-chrome-stable_current_arm64.deb
+          # Add the stable Google Chrome repository configured for the arm64 architecture
+          echo "deb [arch=arm64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
 
-      # 4. Verify the installed Chrome version for debugging logs
+      # 4. Update index and install Google Chrome Stable natively via apt
+      - name: Install Google Chrome Stable
+        run: |
+          sudo apt update
+          sudo apt install -y google-chrome-stable
+
+      # 5. Verify the installed Chrome version for debugging logs
       - name: Verify Chrome Installation
         run: |
           google-chrome --version
           which google-chrome
 
-      # 5. Run your test suite using a virtual framebuffer (Xvfb)
+      # 6. Run your test suite using a virtual framebuffer (Xvfb)
       - name: Run E2E Headless Tests
         env:
-          # Standard environment variable pointing to the native ARM64 Chrome binary
           CHROME_BIN: /usr/bin/google-chrome
         run: |
           # Wrap your testing command inside xvfb-run to simulate a display server
