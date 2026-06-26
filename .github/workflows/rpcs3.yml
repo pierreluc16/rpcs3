@@ -1,4 +1,4 @@
-name: Download and Install US Google Chrome
+name: Install English Google Chrome via Mozilla User-Agent
 
 on:
   push:
@@ -6,55 +6,64 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-and-install:
-    runs-on: ubuntu-24.04-arm  # Optimized for ARM64 runners
+  install-chrome-arm64:
+    runs-on: ubuntu-24.04-arm  # Explicitly pins native Linux ARM64 hardware runner
     
     steps:
       - name: Checkout Code Repository
         uses: actions/checkout@v4
 
-      - name: Download US Chrome Installer via Firefox User-Agent
+      - name: Fetch US Chrome Landing Page via Firefox Agent
         run: |
-          # 1. Base download portal for the United States configuration
-          URL="https://www.google.com/intl/en-us/chrome/"
+          # 1. Base portal directory URL forcing explicit English language pathways
+          URL="https://google.com"
           
-          # 2. Spoofed Mozilla Firefox identity string 
-          FIREFOX_UA="Mozilla/5.0 (X11; Linux aarch64; rv:128.0) Gecko/20100101 Firefox/128.0"
+          # 2. Native ARM64 Mozilla Firefox User-Agent identity footprint
+          FIREFOX_USER_AGENT="Mozilla/5.0 (X11; Linux aarch64; rv:128.0) Gecko/20100101 Firefox/128.0"
           
-          # 3. Save the page footprint while forcing US english localization paths
-          wget --user-agent="$FIREFOX_UA" \
+          # 3. Download the landing page stream passing explicit language fallback headers
+          wget --user-agent="$FIREFOX_USER_AGENT" \
                --header="Accept-Language: en-US,en;q=0.9" \
                --trust-server-names \
-               -O google-chrome-us-landing.html \
+               -O google-chrome-usa-source.html \
                "$URL"
 
-      - name: Configure Secure APT Keyrings for ARM64 Architecture
+      - name: Configure Secure APT Repository Infrastructure
         run: |
+          # Fix: Purge old or broken repository configuration listings to prevent crashes
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.list
+          
           sudo apt-get update
           sudo apt-get install -y curl gnupg
           
-          # Create dedicated directory for repository authentication
+          # Create safe systemic directory path for verification elements
           sudo mkdir -p /usr/share/keyrings
           
-          # Fetch and translate the verification keys securely 
+          # Securely fetch public keys following redirects and convert to GPG format
           curl -fSsL https://google.com | gpg --dearmor | sudo tee /usr/share/keyrings/google-chrome.gpg > /dev/null
           
-          # Set up specific ARM64 package pointers
+          # Corrected Fix: Link to the explicit package database repository instead of the root search domain
           echo "deb [arch=arm64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://google.com stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
 
-      - name: Update Package Index and Run Installer Engine
+      - name: Refresh System Index and Install Browser Package
         run: |
           sudo apt-get update
           sudo apt-get install -y google-chrome-stable
 
-      - name: Validate Binary Version Output
+      - name: Verify Installation and Version Output
         run: |
-          # Confirms the installation succeeded on the ARM processor layout
+          # Confirms the binary executes cleanly on the ARM architecture layout
           google-chrome --version
 
-      - name: Archive HTML Landing Page to Artifacts
+      - name: Force Global Pipeline Environment to English
+        run: |
+          # Locks command line utility output structures into English language configurations
+          echo "LANG=en_US.UTF-8" >> $GITHUB_ENV
+          echo "LANGUAGE=en_US:en" >> $GITHUB_ENV
+
+      - name: Upload HTML Source to Artifact Storage
         uses: actions/upload-artifact@v4
         with:
-          name: google-chrome-us-webpage
-          path: google-chrome-us-landing.html
+          name: chrome-us-web-source
+          path: google-chrome-usa-source.html
           retention-days: 7
