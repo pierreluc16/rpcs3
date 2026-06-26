@@ -8,7 +8,7 @@ on:
 
 jobs:
   run-tests-on-arm:
-    # Target the official GitHub-hosted Ubuntu 24.04 ARM64 runner
+    # Targets the official GitHub-hosted Ubuntu 24.04 ARM64 runner
     runs-on: ubuntu-24.04-arm
 
     steps:
@@ -16,11 +16,11 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # 2. Update packages and install necessary utilities
+      # 2. Update packages and install modern 24.04 system utilities (libgconf removed)
       - name: Install System Dependencies
         run: |
           sudo apt update
-          sudo apt install -y wget xvfb libxi6 libgconf-2-4 libnss3
+          sudo apt install -y wget xvfb libxi6 libnss3 libgbm1 libasound2t64
 
       # 3. Download and install the official stable version of Google Chrome ARM64
       - name: Download and Install Official Google Chrome (ARM64)
