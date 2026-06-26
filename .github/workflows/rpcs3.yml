@@ -1,6 +1,4 @@
-jobs:
-  test:
-    strategy:
+strategy:
   matrix:
     include:
       - os: macos-latest   # resolves to macos-15-arm64
@@ -12,4 +10,4 @@ steps:
     with:
       python-version: "3.13"
   - run: pip install -e .
-  - run: <project's test runner>
+  - run: pytest # Replace with <project's test runner>
