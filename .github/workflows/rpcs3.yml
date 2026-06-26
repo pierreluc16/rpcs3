@@ -1,61 +1,58 @@
-name: Install English Google Chrome via Mozilla User-Agent
+name: Take Website Screenshot via Mozilla Firefox
 
-on: 
+on:
   push:
     branches: [ main ]
   workflow_dispatch:
 
 jobs:
-  install-chrome-arm64:
-    runs-on: ubuntu-24.04-arm  # Explicitly pins native Linux ARM64 hardware runner
+  capture-screenshot:
+    runs-on: ubuntu-24.04-arm  # Optimized for ARM64 runners
     
     steps:
       - name: Checkout Code Repository
         uses: actions/checkout@v4
 
-      - name: Fetch Chrome Installer via Firefox Agent (English Locale)
-        run: |
-          # 1. Base portal directory URL forcing explicit English language pathways
-          URL="https://google.com"
-          
-          # 2. Native ARM64 Mozilla Firefox User-Agent identity footprint
-          FIREFOX_USER_AGENT="Mozilla/5.0 (X11; Linux aarch64; rv:128.0) Gecko/20100101 Firefox/128.0"
-          
-          # 3. Download the landing page stream passing explicit language fallback headers
-          wget --user-agent="$FIREFOX_USER_AGENT" \
-               --header="Accept-Language: en-US,en;q=0.9" \
-               --trust-server-names \
-               -O google-chrome-arm64.deb \
-               "$URL"
+      - name: Set Up Node.js Environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
 
-      - name: Set Up APT Repository Infrastructure with Secure GPG Fix
+      - name: Install Playwright Automation Engine
         run: |
-          sudo apt-get update
-          sudo apt-get install -y curl gnupg
-          
-          # Create safe systemic directory path for verification elements
-          sudo mkdir -p /usr/share/keyrings
-          
-          # Fix: Fetch the public key following redirects securely, conversion-piping to GPG format
-          curl -fSsL https://google.com | gpg --dearmor | sudo tee /usr/share/keyrings/google-chrome.gpg > /dev/null
-          
-          # Establish clear target configuration pointers locked exclusively to arm64 builds
-          echo "deb [arch=arm64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://google.com stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
+          npm init -y
+          npm install playwright
 
-      - name: Refresh System Index and Install Browser Package
+      - name: Install Firefox Browser and System Dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y google-chrome-stable
+          npx playwright install firefox --with-deps
 
-      - name: Force Global Pipeline Environment to English
+      - name: Execute Automated Screenshot Script
         run: |
-          # Locks command line utility output structures into English language configurations
-          echo "LANG=en_US.UTF-8" >> $GITHUB_ENV
-          echo "LANGUAGE=en_US:en" >> $GITHUB_ENV
+          node -e "
+          const { firefox } = require('playwright');
+          (async () => {
+            // Launch headless Mozilla Firefox
+            const browser = await firefox.launch();
+            const context = await browser.newContext({
+              viewport: { width: 1280, height: 800 },
+              locale: 'en-US'
+            });
+            const page = await context.newPage();
+            
+            // Navigate to the target page and wait for assets to load
+            await page.goto('https://www.google.com/chrome/', { waitUntil: 'networkidle' });
+            
+            // Capture a crisp full-page image file
+            await page.screenshot({ path: 'chrome-website-screenshot.png', fullPage: true });
+            
+            await browser.close();
+          })();
+          "
 
-      - name: Upload Installer Package to Build Artifacts
+      - name: Upload Screenshot to Job Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: google-chrome-arm64-deb
-          path: google-chrome-arm64.deb
+          name: google-chrome-page-screenshot
+          path: chrome-website-screenshot.png
           retention-days: 7
