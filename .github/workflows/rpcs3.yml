@@ -9,7 +9,7 @@ on:
 
 jobs:
   check-icu:
-    runs-on: ubuntu-26.04-arm
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout Repository
@@ -25,7 +25,7 @@ jobs:
           echo "--------"
           echo "ニニニニニニニニニニニニニ"
           
-          # [Method 1] pkg-config & libicu-dev check
+          # [Method 1] pkg-config
           echo "[Method 1] Checking via pkg-config..."
           if pkg-config --exists icu-i18n 2>/dev/null; then
             VERSION=$(pkg-config --modversion icu-i18n)
@@ -35,7 +35,7 @@ jobs:
             echo "pkg-config: Cannot find icu-i18n (libicu-dev is missing)."
           fi
           
-          # [Method 2] uconv utility check
+          # [Method 2] uconv
           echo "[Method 2] Checking via uconv command utility..."
           if command -v uconv &> /dev/null; then
             UCONV_VER=$(uconv --version | awk '{print $NF}')
@@ -44,26 +44,22 @@ jobs:
             echo "X uconv: Command utility not found on the system."
           fi
           
-          # [Method 3] dpkg package database check (Auto-detect version & components)
+          # [Method 3] dpkg
           echo "[Method 3] Checking via dpkg (installed packages database)..."
-          if dpkg -l | grep -qE "libicu[0-9]+|libicu-dev"; then
+          if dpkg -l | grep -q "libicu"; then
             echo "DETECTED: libicu components exist inside package manager database."
-            
-            # Affichage dynamique de tous les paquets liés à ICU (libicuXX, libicu-dev, etc.)
-            dpkg -l | grep -E "libicu[0-9]+|libicu-dev" | awk '{print "- " $2 " (Version: " $3 ")"}'
+            dpkg -l | grep "libicu" | awk '{print "- " $2 " (Version: " $3 ")"}'
           else
             echo "X No libicu packages found via dpkg."
           fi
           
-          # [Method 4] Direct SO scanning (Auto-detect paths & filenames dynamically)
+          # [Method 4] Direct SO scanning (Sécurisé contre l'exit code 2)
           echo "[Method 4] Direct system scanning for library files (.so)..."
-          SO_FILES=$(ls /usr/lib/x86_64-linux-gnu/libicuuc.so* 2>/dev/null)
+          TARGET_DIR="/usr/lib/x86_64-linux-gnu"
           
-          if [ ! -z "$SO_FILES" ]; then
+          if [ -d "$TARGET_DIR" ] && [ "$(find "$TARGET_DIR" -maxdepth 1 -name "libicuuc.so*" | wc -l)" -gt 0 ]; then
             echo "DETECTED: Active .so files discovered in the system folder."
-            
-            # Liste dynamiquement tous les fichiers .so trouvés avec leurs cibles de liens symboliques
-            ls -l /usr/lib/x86_64-linux-gnu/libicuuc.so* | awk '{
+            find "$TARGET_DIR" -maxdepth 1 -name "libicuuc.so*" -exec ls -l {} + | awk '{
               if ($11 != "") 
                 print "- " $9 " -> " $11; 
               else 
