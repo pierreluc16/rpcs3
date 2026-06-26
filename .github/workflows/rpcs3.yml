@@ -16,7 +16,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-latest   # Resolves to macos-15-arm64
+          - os: macos-14   # Resolves to macos-15-arm64
             name: macos
 
     steps:
