@@ -1,70 +1,48 @@
-name: Secure Download and Install US Chrome ARM64
+name: CI Automation Tests on Ubuntu 24.04 ARM64
 
 on:
   push:
-    branches: [ main ]
-  workflow_dispatch:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
 
 jobs:
-  install-chrome-arm64:
-    runs-on: ubuntu-24.04-arm  # Explicitly runs on native ARM64 Linux runner hardware
-    
+  run-tests-on-arm:
+    # Target the official GitHub-hosted Ubuntu 24.04 ARM64 runner
+    runs-on: ubuntu-24.04-arm
+
     steps:
-      - name: Checkout Code Repository
+      # 1. Pull the source code from your repository
+      - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Download US Chrome Page Source via Firefox Agent
+      # 2. Update packages and install necessary utilities
+      - name: Install System Dependencies
         run: |
-          # 1. Official USA localized portal directory URL
-          URL="https://google.com"
-          
-          # 2. Native ARM64 Mozilla Firefox User-Agent identity footprint
-          FIREFOX_USER_AGENT="Mozilla/5.0 (X11; Linux aarch64; rv:128.0) Gecko/20100101 Firefox/128.0"
-          
-          # 3. Securely fetch the landing page using custom headers to simulate a real user
-          wget --user-agent="$FIREFOX_USER_AGENT" \
-               --header="Accept-Language: en-US,en;q=0.9" \
-               --trust-server-names \
-               -O google-chrome-usa-source.html \
-               "$URL"
+          sudo apt update
+          sudo apt install -y wget xvfb libxi6 libgconf-2-4 libnss3
 
-      - name: Clean Environment and Configure Official APT Infrastructure
+      # 3. Download and install the official stable version of Google Chrome ARM64
+      - name: Download and Install Official Google Chrome (ARM64)
         run: |
-          # CRITICAL FIX: Purge the broken google.com entries completely from ALL system apt folders
-          sudo rm -f /etc/apt/sources.list.d/google-chrome.list
-          sudo sed -i '/://google.com' /etc/apt/sources.list || true
+          # Fetch the official stable ARM64 deb package provided by Google
+          wget https://google.com
           
-          sudo apt-get update
-          sudo apt-get install -y curl gnupg
-          
-          # Setup local path verification security keyrings
-          sudo mkdir -p /usr/share/keyrings
-          
-          # Securely stream official public keys without piping invalid raw HTML text
-          curl -fSsL https://google.com | gpg --dearmor | sudo tee /usr/share/keyrings/google-chrome.gpg > /dev/null
-          
-          # Establish the official Chrome repository targeting the true distribution domain
-          echo "deb [arch=arm64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://google.com stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
+          # Install the local package while letting apt handle any 24.04 package dependencies
+          sudo apt install -y ./google-chrome-stable_current_arm64.deb
 
-      - name: Update System Database and Install Chrome Stable
+      # 4. Verify the installed Chrome version for debugging logs
+      - name: Verify Chrome Installation
         run: |
-          sudo apt-get update
-          sudo apt-get install -y google-chrome-stable
-
-      - name: Verify Live Installation and Version Profile
-        run: |
-          # System validation step ensures it executes properly on your architecture layout
           google-chrome --version
+          which google-chrome
 
-      - name: Lock Active Shell Pipeline Environment to English
+      # 5. Run your test suite using a virtual framebuffer (Xvfb)
+      - name: Run E2E Headless Tests
+        env:
+          # Standard environment variable pointing to the native ARM64 Chrome binary
+          CHROME_BIN: /usr/bin/google-chrome
         run: |
-          # Sets systemic locale variables to enforce clear English terminal messaging
-          echo "LANG=en_US.UTF-8" >> $GITHUB_ENV
-          echo "LANGUAGE=en_US:en" >> $GITHUB_ENV
-
-      - name: Upload Scraped Webpage Source to Build Artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: google-chrome-us-source
-          path: google-chrome-usa-source.html
-          retention-days: 7
+          # Wrap your testing command inside xvfb-run to simulate a display server
+          # Replace 'npm test' with your exact command (e.g., 'pytest', 'mvn test')
+          xvfb-run --server-args="-screen 0 1280x1024x24" npm test
