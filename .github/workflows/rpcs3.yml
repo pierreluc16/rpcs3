@@ -1,13 +1,28 @@
-strategy:
-  matrix:
-    include:
-      - os: macos-latest   # resolves to macos-15-arm64
-        name: macos
-runs-on: ${{ matrix.os }}
-steps:
-  - uses: actions/checkout@v5
-  - uses: actions/setup-python@v6
-    with:
-      python-version: "3.13"
-  - run: pip install -e .
-  - run: pytest # Replace with <project's test runner>
+name: Run Tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest   # resolves to macos-15-arm64
+            name: macos
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          
+      - name: Install dependencies
+        run: pip install -e .
+        
+      - name: Run tests
+        run: pytest # Replace with your project's specific test runner command
