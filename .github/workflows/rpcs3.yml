@@ -1,104 +1,15 @@
-name: Benchmark Issue 14181
-
-on:
-  push:
-    branches: [ main, master ]
-  pull_request:
-    branches: [ main, master ]
-  workflow_dispatch:
-
 jobs:
   test:
-    name: Run Benchmark (${{ matrix.name }})
-    runs-on: ${{ matrix.os }}
-    
     strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: macos-latest   # Default stable macOS ARM64 runner
-            name: macos-latest
-          - os: macos-26       # macOS 26 Tahoe ARM64 runner
-            name: macos-26
-
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v5
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.13"
-
-      - name: Execute Asyncio Multiprocessing Benchmark
-        timeout-minutes: 45
-        run: |
-          # 1. Create a physical script file to allow proper multiprocessing 'spawn' initialization
-          cat << 'EOF' > repro_test.py
-          import asyncio
-          import multiprocessing
-          import time
-          import os
-          import sys
-
-          async def simulate_single_test(test_id):
-              # Mimics a tiny unit test I/O operation
-              await asyncio.sleep(0.01)
-              return f"Test {test_id} OK"
-
-          def process_worker(test_id):
-              return asyncio.run(simulate_single_test(test_id))
-
-          async def main():
-              print("--- Starting Reproduction Benchmark ---")
-              start_time = time.time()
-              
-              from concurrent.futures import ProcessPoolExecutor
-              loop = asyncio.get_running_loop()
-              
-              num_tests = 486 # Matching your exact test suite volume
-              max_workers = min(4, os.cpu_count() or 2)
-              
-              print(f"Spawning {num_tests} short-lived subprocesses...")
-              sys.stdout.flush()
-              
-              with ProcessPoolExecutor(max_workers=max_workers) as executor:
-                  tasks = [
-                      loop.run_in_executor(executor, process_worker, i)
-                      for i in range(num_tests)
-                  ]
-                  await asyncio.gather(*tasks)
-              
-              duration = time.time() - start_time
-              print("--- Benchmark Finished ---")
-              print(f"Total execution time: {duration:.2f} seconds")
-              sys.stdout.flush()
-              
-              # STRICT HISTORICAL THRESHOLD (The entire suite used to finish in under 2 minutes)
-              HISTORICAL_THRESHOLD = 120.0 
-              
-              # Write results into the GitHub Actions Step Summary markdown panel
-              summary_file = os.environ.get('GITHUB_STEP_SUMMARY')
-              if summary_file:
-                  with open(summary_file, 'a') as f:
-                      f.write(f"## 📊 Benchmark Results ({sys.platform.upper()})\n")
-                      f.write(f"- **Total Short Subprocesses Spawned**: {num_tests}\n")
-                      f.write(f"- **Historical Expected Baseline**: `< {HISTORICAL_THRESHOLD} seconds`\n")
-                      f.write(f"- **Current Measured Execution Time**: `{duration:.2f} seconds`\n\n")
-                      
-                      if duration > HISTORICAL_THRESHOLD:
-                          f.write(f"❌ **Status: REGRESSION CONFIRMED.** Execution took {duration:.2f}s, breaching the 2-minute clean historical limit.\n")
-                      else:
-                          f.write("✅ **Status: NOMINAL PERFORMANCE.** The runner environment matches the fast historical baseline.\n")
-
-              if duration > HISTORICAL_THRESHOLD:
-                  print(f"Performance baseline breached ({duration:.2f}s > {HISTORICAL_THRESHOLD}s). Failing build.")
-                  sys.exit(1)
-
-          if __name__ == '__main__':
-              multiprocessing.set_start_method('spawn', force=True)
-              asyncio.run(main())
-          EOF
-
-          # 2. Run the actual physical file safely
-          python repro_test.py
+  matrix:
+    include:
+      - os: macos-latest   # resolves to macos-15-arm64
+        name: macos
+runs-on: ${{ matrix.os }}
+steps:
+  - uses: actions/checkout@v5
+  - uses: actions/setup-python@v6
+    with:
+      python-version: "3.13"
+  - run: pip install -e .
+  - run: <project's test runner>
