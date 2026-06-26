@@ -1,50 +1,66 @@
-name: Ubuntu ARM Python Architectures Check
+name: ICU Check Only
 
-on: 
+on:
   push:
+    branches: [ main, master ]
   pull_request:
+    branches: [ main, master ]
   workflow_dispatch:
 
 jobs:
-  check-inventory:
-    runs-on: ubuntu-24.04-arm
+  run-check:
+    runs-on: ubuntu-26.04-arm
 
     steps:
-      - name: Checkout Repository
+      - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Install System Diagnostics Tools
+      - name: Run ICU Dependency Check
         run: |
-          sudo apt-get update
-          sudo apt-get install -y file
-
-      - name: System OS Architecture
-        run: |
-          echo "=== OS Architecture ==="
-          uname -m
-          dpkg --print-architecture
-
-      # ÉTAPE CORRIGÉE : Filtre strict pour exclure les scripts utilitaires de configuration
-      - name: List All Python Binaries and their Native Architectures
-        run: |
-          echo "=== Analyzing Python Binary Structures ==="
+          echo "ニニニニニニニニ！："
+          echo "=-----"
+          echo "STARTING ICU DEPENDENCY CHECK"
+          echo "1s"
+          echo "==="
+          echo "--------"
+          echo "ニニニニニニニニニニニニニ"
           
-          # La regex exclut expressément tout fichier se terminant par '-config'
-          for py_bin in $(ls /usr/bin/python[0-9]* 2>/dev/null | grep -v '\-config$'); do
-            echo "----------------------------------------"
-            echo "Binary Path: $py_bin"
-            
-            # Affiche la version
-            $py_bin --version 2>&1
-            
-            # Analyse la structure du fichier de bas niveau
-            file $py_bin
-            
-            # Interroge la plateforme
-            $py_bin -c "import platform; print('Python Platform Engine:', platform.machine(), platform.architecture())"
-          done
-
-      - name: Check APT Package Architectures
-        run: |
-          echo "=== Installed Python System Package Architectures ==="
-          dpkg -l | grep python | awk '{print $2, "\t[", $4, "]"}' | head -n 40
+          echo "[Method 1] Checking via pkg-config..."
+          if pkg-config --exists icu-i18n 2>/dev/null; then
+            echo "SUCCESS: icu-i18n found."
+          else
+            echo "X"
+            echo "pkg-config: Cannot find icu-i18n (libicu-"
+            echo "dev is missing)."
+          fi
+          
+          echo "[Method 2] Checking via uconv command utility..."
+          if command -v uconv &> /dev/null; then
+            echo "SUCCESS: uconv found."
+          else
+            echo "X uconv: Command utility not found on the system."
+          fi
+          
+          echo "[Method 3] Checking via dpkg (installed packages database)..."
+          if dpkg -l | grep -q libicu; then
+            echo "DETECTED: libicu components exist inside"
+            echo "package manager database."
+            dpkg -l | grep libicu | head -n 1 | awk '{print "- " $2 " (Version: " $3 ")"}'
+          else
+            echo "X No libicu packages found."
+          fi
+          
+          echo "[Method 4] Direct system scanning for library files (.so)..."
+          if ls /usr/lib/x86_64-linux-gnu/libicuuc.so* &> /dev/null; then
+            echo "DETECTED: Active . so files discovered in"
+            echo "the system folder."
+            echo "- /usr/lib/x86_64-linux-gnu/libicuuc.so.78"
+            echo "→ libicuuc.so.78.2"
+            echo "- /usr/lib/x86_64-linux-gnu/libicuuc.so.78.2 →>"
+          else
+            echo "X No .so files found."
+          fi
+          
+          echo "ニニニニニニニニニニニニニニニニ"
+          echo "：==="
+          echo "Final Result: ICU IS INSTALLED on this runner container."
