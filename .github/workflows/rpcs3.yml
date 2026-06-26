@@ -1,11 +1,46 @@
-name: Ubuntu ARM Inventory Check
+name: Ubuntu ARM Python Architectures Check
 
-on: [push, pull_request, workflow_dispatch]
+on: 
+  push:
+  pull_request:
+  workflow_dispatch:
 
 jobs:
   check-inventory:
-    runs-on: ubuntu-24.04-arm # Exemple d'un exécuteur Ubuntu ARM moderne
+    runs-on: ubuntu-24.04-arm64
 
     steps:
-      - name: Check Python Version
-        run: python3 --version
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # Step 1: Output the underlying host Operating System architecture
+      - name: System OS Architecture
+        run: |
+          echo "=== OS Architecture ==="
+          uname -m
+          dpkg --print-architecture
+
+      # Step 2: Loop through each Python executable to read its low-level compiled hardware architecture
+      - name: List All Python Binaries and their Native Architectures
+        run: |
+          echo "=== Analyzing Python Binary Structures ==="
+          for py_bin in $(ls /usr/bin/python[0-9]* 2>/dev/null); do
+            echo "----------------------------------------"
+            echo "Binary Path: $py_bin"
+            
+            # Displays the marketing version of the current binary
+            $py_bin --version 2>&1
+            
+            # Reads the internal file structure (ELF 64-bit LSB shared object, ARM aarch64, etc.)
+            file $py_bin
+            
+            # Asks the runtime environment to report its own target architecture
+            $py_bin -c "import platform; print('Python Platform Engine:', platform.machine(), platform.architecture())"
+          done
+
+      # Step 3: Check package architectures registered via Ubuntu's Package Manager (APT)
+      - name: Check APT Package Architectures
+        run: |
+          echo "=== Installed Python System Package Architectures ==="
+          # Lists system packages to see their architecture flag (:arm64 or :all)
+          dpkg -l | grep python | awk '{print $2, "\t[", $4, "]"}' | head -n 40
