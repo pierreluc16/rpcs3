@@ -1,11 +1,11 @@
-name: Windows 11 ARM Launcher Check
+name: Ubuntu ARM Inventory Check
 
 on: [push, pull_request, workflow_dispatch]
 
 jobs:
   check-inventory:
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-24.04-arm64 # Exemple d'un exécuteur Ubuntu ARM moderne
 
     steps:
-      - name: List Launcher Inventory
-        run: py -0p
+      - name: Check Python Version
+        run: python3 --version
