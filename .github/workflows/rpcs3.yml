@@ -8,22 +8,33 @@ on:
 
 jobs:
   run-tests-on-arm:
-    # Targets the official GitHub-hosted Ubuntu 24.04 ARM64 runner
     runs-on: ubuntu-24.04-arm
 
     steps:
-      # 1. Pull the source code from your repository
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # 2. Update packages and install modern 24.04 system dependencies
       - name: Install System Dependencies
         run: |
           sudo apt update
           sudo apt install -y wget curl xvfb libxi6 libnss3 libgbm1 libasound2t64
 
-      # 3. Download the ARM64 bundle directly from the official Google Chrome server
-      # Using curl -L follows redirects from the website down to the raw data stream
+      # Removed nested inner quotes to prevent YAML parsing and unexpected EOF errors
       - name: Download from Google Chrome Website
         run: |
-          curl -L "
+          curl -L https://google.com -o google-chrome.deb
+
+      - name: Install Google Chrome ARM64
+        run: |
+          sudo apt install -y ./google-chrome.deb
+
+      - name: Verify Chrome Installation
+        run: |
+          google-chrome --version
+          which google-chrome
+
+      - name: Run E2E Headless Tests
+        env:
+          CHROME_BIN: /usr/bin/google-chrome
+        run: |
+          xvfb-run --server-args="-screen 0 1280x1024x24" npm test
