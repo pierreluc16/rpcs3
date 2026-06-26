@@ -31,7 +31,8 @@ jobs:
       - name: Execute Asyncio Multiprocessing Benchmark
         timeout-minutes: 30
         run: |
-          python - << 'EOF'
+          # 1. Create a physical file to prevent the <stdin> spawn crash
+          cat << 'EOF' > repro_test.py
           import asyncio
           import multiprocessing
           import time
@@ -90,3 +91,6 @@ jobs:
               multiprocessing.set_start_method('spawn', force=True)
               asyncio.run(main())
           EOF
+
+          # 2. Run the actual physical file
+          python repro_test.py
