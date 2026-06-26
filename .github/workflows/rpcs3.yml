@@ -1,29 +1,49 @@
-name: Run Tests
+name: Install English Google Chrome via Mozilla User-Agent
 
-on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
-  workflow_dispatch: # Allows manual launch button in GitHub UI
+on: [push, workflow_dispatch]
 
 jobs:
-  test:
-    strategy:
-      matrix:
-        include:
-          - os: macos-latest   # resolves to macos-15-arm64
-            name: macos
-    runs-on: ${{ matrix.os }}
+  install-chrome-arm64:
+    runs-on: ubuntu-24.04-arm  # Specifies the native ARM64 Linux runner
+    
     steps:
-      - uses: actions/checkout@v5
-      
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.13"
+      - name: Download Chrome using Firefox User-Agent (English Locale)
+        run: |
+          # 1. Target URL pointing to the English locale site
+          URL="https://google.com"
           
-      - name: Install dependencies
-        run: pip install -e .
-        
-      - name: Run tests
-        run: pytest # Replace with your test command
+          # 2. Native ARM64 Mozilla Firefox User-Agent identity string
+          FIREFOX_USER_AGENT="Mozilla/5.0 (X11; Linux aarch64; rv:128.0) Gecko/20100101 Firefox/128.0"
+          
+          # 3. Request download forcing standard US English locale headers
+          wget --user-agent="$FIREFOX_USER_AGENT" \
+               --header="Accept-Language: en-US,en;q=0.9" \
+               --trust-server-names \
+               -O google-chrome-arm64.deb \
+               "$URL"
+
+      - name: Set Up APT Dépôt Dependencies and Install Paquet
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget gnupg
+          
+          # Inject Google signature keys into the Ubuntu system
+          wget -q -O - https://google.com | sudo gpg --dearmor -o /usr/share/keyrings/google-chrome.gpg
+          echo "deb [arch=arm64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://google.com stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
+          
+          # Run final update and install stable browser binary
+          sudo apt-get update
+          sudo apt-get install -y google-chrome-stable
+
+      - name: Force Environment Language to English
+        run: |
+          # Set explicit English execution flag for CLI tasks
+          echo "LANG=en_US.UTF-8" >> $GITHUB_ENV
+          echo "LANGUAGE=en_US:en" >> $GITHUB_ENV
+
+      - name: Upload Installer Package to Job Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: google-chrome-arm64-deb
+          path: google-chrome-arm64.deb
+          retention-days: 7
