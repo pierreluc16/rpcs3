@@ -1,4 +1,4 @@
-name: Install English Google Chrome via Mozilla User-Agent
+name: Download and Install Google Chrome
 
 on:
   push:
@@ -7,63 +7,35 @@ on:
 
 jobs:
   install-chrome-arm64:
-    runs-on: ubuntu-24.04-arm  # Explicitly pins native Linux ARM64 hardware runner
+    runs-on: ubuntu-24.04-arm  # Deploys on a native Linux ARM64 hardware runner
     
     steps:
       - name: Checkout Code Repository
         uses: actions/checkout@v4
 
-      - name: Fetch US Chrome Landing Page via Firefox Agent
+      - name: Clean and Configure Secure APT Repository Pointers
         run: |
-          # 1. Base portal directory URL forcing explicit English language pathways
-          URL="https://google.com"
-          
-          # 2. Native ARM64 Mozilla Firefox User-Agent identity footprint
-          FIREFOX_USER_AGENT="Mozilla/5.0 (X11; Linux aarch64; rv:128.0) Gecko/20100101 Firefox/128.0"
-          
-          # 3. Download the landing page stream passing explicit language fallback headers
-          wget --user-agent="$FIREFOX_USER_AGENT" \
-               --header="Accept-Language: en-US,en;q=0.9" \
-               --trust-server-names \
-               -O google-chrome-usa-source.html \
-               "$URL"
-
-      - name: Configure Secure APT Repository Infrastructure
-        run: |
-          # Fix: Purge old or broken repository configuration listings to prevent crashes
+          # Clear out old or invalid repository listings to avoid update collision crashes
           sudo rm -f /etc/apt/sources.list.d/google-chrome.list
           
           sudo apt-get update
           sudo apt-get install -y curl gnupg
           
-          # Create safe systemic directory path for verification elements
+          # Provision safe system verification directory paths
           sudo mkdir -p /usr/share/keyrings
           
-          # Securely fetch public keys following redirects and convert to GPG format
+          # Fetch public keys cleanly following server redirections and decode to binary GPG format
           curl -fSsL https://google.com | gpg --dearmor | sudo tee /usr/share/keyrings/google-chrome.gpg > /dev/null
           
-          # Corrected Fix: Link to the explicit package database repository instead of the root search domain
+          # Map repository configurations explicitly to the correct Linux ARM64 target base URL
           echo "deb [arch=arm64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://google.com stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
 
-      - name: Refresh System Index and Install Browser Package
+      - name: Refresh System Package Indexes and Install Chrome Stable
         run: |
           sudo apt-get update
           sudo apt-get install -y google-chrome-stable
 
-      - name: Verify Installation and Version Output
+      - name: Verify Installation and Version Check
         run: |
-          # Confirms the binary executes cleanly on the ARM architecture layout
+          # Confirms the execution engine runs natively on the ARM architecture layout
           google-chrome --version
-
-      - name: Force Global Pipeline Environment to English
-        run: |
-          # Locks command line utility output structures into English language configurations
-          echo "LANG=en_US.UTF-8" >> $GITHUB_ENV
-          echo "LANGUAGE=en_US:en" >> $GITHUB_ENV
-
-      - name: Upload HTML Source to Artifact Storage
-        uses: actions/upload-artifact@v4
-        with:
-          name: chrome-us-web-source
-          path: google-chrome-usa-source.html
-          retention-days: 7
