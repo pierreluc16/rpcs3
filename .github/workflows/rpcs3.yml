@@ -16,38 +16,14 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # 2. Update packages and install modern 24.04 system utilities
+      # 2. Update packages and install modern 24.04 system dependencies
       - name: Install System Dependencies
         run: |
           sudo apt update
-          sudo apt install -y wget curl gnupg xvfb libxi6 libnss3 libgbm1 libasound2t64
+          sudo apt install -y wget curl xvfb libxi6 libnss3 libgbm1 libasound2t64
 
-      # 3. Add Google's official signing key and package repository
-      - name: Configure Official Google Chrome Repository
+      # 3. Download the ARM64 bundle directly from the official Google Chrome server
+      # Using curl -L follows redirects from the website down to the raw data stream
+      - name: Download from Google Chrome Website
         run: |
-          # Download Google's official GPG signing key
-          curl -fsSL https://dl.google.com/linux/linux_signing_key.pub | sudo gpg --dearmor -o /usr/share/keyrings/google-chrome.gpg
-          
-          # Add the stable Google Chrome repository configured for the arm64 architecture
-          echo "deb [arch=arm64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
-
-      # 4. Update index and install Google Chrome Stable natively via apt
-      - name: Install Google Chrome Stable
-        run: |
-          sudo apt update
-          sudo apt install -y google-chrome-stable
-
-      # 5. Verify the installed Chrome version for debugging logs
-      - name: Verify Chrome Installation
-        run: |
-          google-chrome --version
-          which google-chrome
-
-      # 6. Run your test suite using a virtual framebuffer (Xvfb)
-      - name: Run E2E Headless Tests
-        env:
-          CHROME_BIN: /usr/bin/google-chrome
-        run: |
-          # Wrap your testing command inside xvfb-run to simulate a display server
-          # Replace 'npm test' with your exact command (e.g., 'pytest', 'mvn test')
-          xvfb-run --server-args="-screen 0 1280x1024x24" npm test
+          curl -L "
