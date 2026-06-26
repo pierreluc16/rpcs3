@@ -4,7 +4,7 @@ on: [push, pull_request, workflow_dispatch]
 
 jobs:
   check-inventory:
-    runs-on: ubuntu-24.04-arm64 # Exemple d'un exécuteur Ubuntu ARM moderne
+    runs-on: ubuntu-24.04-arm # Exemple d'un exécuteur Ubuntu ARM moderne
 
     steps:
       - name: Check Python Version
