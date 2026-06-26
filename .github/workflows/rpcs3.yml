@@ -1,18 +1,22 @@
-name: Test on macOS
+name: Benchmark Issue 14181
 
 on:
   push:
     branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
+  workflow_dispatch:
 
 jobs:
   test:
+    name: Run Benchmark (${{ matrix.name }})
     runs-on: ${{ matrix.os }}
+    
     strategy:
+      fail-fast: false
       matrix:
         include:
-          - os: macos-latest   # se résout en macOS 15 ARM64 (Apple Silicon)
+          - os: macos-latest   # Resolves to macos-15-arm64
             name: macos
 
     steps:
@@ -24,8 +28,65 @@ jobs:
         with:
           python-version: "3.13"
 
-      - name: Install package
-        run: pip install -e .
+      - name: Execute Asyncio Multiprocessing Benchmark
+        timeout-minutes: 30
+        run: |
+          python - << 'EOF'
+          import asyncio
+          import multiprocessing
+          import time
+          import os
+          import sys
 
-      - name: Run tests
-        run: pytest # Remplacez par votre outil (ex: python -m unittest, pytest, tox)
+          async def simulate_single_test(test_id):
+              await asyncio.sleep(0.01)
+              return f"Test {test_id} OK"
+
+          def process_worker(test_id):
+              return asyncio.run(simulate_single_test(test_id))
+
+          async def main():
+              print("--- Starting Reproduction Benchmark ---")
+              start_time = time.time()
+              
+              from concurrent.futures import ProcessPoolExecutor
+              loop = asyncio.get_running_loop()
+              
+              num_tests = 200 
+              max_workers = min(4, os.cpu_count() or 2)
+              
+              print(f"Spawning {num_tests} short-lived subprocesses...")
+              
+              with ProcessPoolExecutor(max_workers=max_workers) as executor:
+                  tasks = [
+                      loop.run_in_executor(executor, process_worker, i)
+                      for i in range(num_tests)
+                  ]
+                  await asyncio.gather(*tasks)
+              
+              duration = time.time() - start_time
+              print("--- Benchmark Finished ---")
+              print(f"Total execution time: {duration:.2f} seconds")
+              
+              # Write results into the GitHub Actions Step Summary
+              summary_file = os.environ.get('GITHUB_STEP_SUMMARY')
+              if summary_file:
+                  with open(summary_file, 'a') as f:
+                      f.write("## 📊 Benchmark Results (Issue #14181)\n")
+                      f.write(f"- **Runner OS**: macOS (ARM64 Architecture)\n")
+                      f.write(f"- **Python Version**: 3.13\n")
+                      f.write(f"- **Total Short Subprocesses Spawned**: {num_tests}\n")
+                      f.write(f"- **Total Execution Time**: `{duration:.2f} seconds`\n\n")
+                      
+                      if duration > 120:
+                          f.write("❌ **Status: REGRESSION DETECTED.** The runner image shows an abnormally high subprocess creation overhead.\n")
+                      else:
+                          f.write("✅ **Status: NOMINAL PERFORMANCE.** The runner image handles process spawning within expected limits.\n")
+
+              if duration > 120:
+                  sys.exit(1)
+
+          if __name__ == '__main__':
+              multiprocessing.set_start_method('spawn', force=True)
+              asyncio.run(main())
+          EOF
