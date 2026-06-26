@@ -7,20 +7,27 @@ on:
 
 jobs:
   check-inventory:
+    # Étiquette exacte certifiée par GitHub pour les runners ARM publics
     runs-on: ubuntu-24.04-arm
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # Step 1: Output the underlying host Operating System architecture
+      # Étape de sécurité : installe l'outil 'file' pour éviter le plantage
+      - name: Install System Diagnostics Tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y file
+
+      # Étape 1 : Obtenir l'architecture globale du système d'exploitation
       - name: System OS Architecture
         run: |
           echo "=== OS Architecture ==="
           uname -m
           dpkg --print-architecture
 
-      # Step 2: Loop through each Python executable to read its low-level compiled hardware architecture
+      # Étape 2 : Détecter l'architecture propre à chaque exécutable Python trouvé
       - name: List All Python Binaries and their Native Architectures
         run: |
           echo "=== Analyzing Python Binary Structures ==="
@@ -28,19 +35,18 @@ jobs:
             echo "----------------------------------------"
             echo "Binary Path: $py_bin"
             
-            # Displays the marketing version of the current binary
+            # Affiche la version commerciale de l'exécutable
             $py_bin --version 2>&1
             
-            # Reads the internal file structure (ELF 64-bit LSB shared object, ARM aarch64, etc.)
+            # Analyse la structure interne de bas niveau du fichier
             file $py_bin
             
-            # Asks the runtime environment to report its own target architecture
+            # Demande à l'environnement d'exécution de rapporter son architecture cible
             $py_bin -c "import platform; print('Python Platform Engine:', platform.machine(), platform.architecture())"
           done
 
-      # Step 3: Check package architectures registered via Ubuntu's Package Manager (APT)
+      # Étape 3 : Vérifier l'architecture globale enregistrée par APT
       - name: Check APT Package Architectures
         run: |
           echo "=== Installed Python System Package Architectures ==="
-          # Lists system packages to see their architecture flag (:arm64 or :all)
           dpkg -l | grep python | awk '{print $2, "\t[", $4, "]"}' | head -n 40
