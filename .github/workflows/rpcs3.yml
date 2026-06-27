@@ -1,92 +1,37 @@
-name: Production Toolchain Verification Scan
+name: Check System Architecture - Windows 11 ARM
 
 on:
-  push:
-    branches: [ main ]
-  workflow_dispatch: # Allows manual on-demand pipeline execution
+  workflow_dispatch: # Allows you to trigger this workflow manually from the Actions tab
 
 jobs:
-  assert-toolchain-compliance:
-    runs-on: windows-11-arm
-    name: "Audit: Windows SDK & Debugger Integrity"
+  check-architecture:
+    runs-on: windows-11-arm # Targets GitHub's hosted Windows 11 ARM64 virtual machines
 
     steps:
-    - name: 1. Map SDK Installation Directories dynamically
-      id: locate-sdk
-      shell: powershell
-      run: |
-        Write-Host "Querying Windows Registry for valid KitsRoot entries..."
-        $regPath = "HKLM:\SOFTWARE\Microsoft\Windows Kits\Installed Roots"
-        $sdkReg = Get-ItemProperty -Path $regPath -ErrorAction SilentlyContinue
-        
-        if (-not $sdkReg -or -not $sdkReg.KitsRoot10) {
-            Write-Error "Verification Blocked: Windows Kits Root 10 registry path is missing."
-            exit 1
-        }
-        
-        $sdkHome = $sdkReg.KitsRoot10
-        Write-Host "Verified active Windows SDK Home at: $sdkHome"
-        echo "SDK_HOME=$sdkHome" >> $env:GITHUB_ENV
+      - name: Delete ARM Python versions (Keep x64)
+        shell: pwsh
+        run: |
+          # Locate the default Python directory in the GitHub hosted toolcache
+          $toolcacheDir = "$env:AGENT_TOOLSDIRECTORY\Python"
+          
+          if (Test-Path $toolcacheDir) {
+              # Find and loop through all pre-installed Python version folders
+              Get-ChildItem $toolcacheDir -Directory | ForEach-Object {
+                  # Check if the folder name specifies an arm or aarch architecture
+                  if ($_.Name -like "*arm*" -or $_.Name -like "*aarch*") {
+                      Write-Host "Removing native ARM installation folder: $($_.FullName)"
+                      Remove-Item -Path $_.FullName -Recurse -Force
+                  }
+              }
+          } else {
+              Write-Host "The Python toolcache directory does not exist or is empty."
+          }
 
-    - name: 2. Matrix Validation of Required Debugger Binaries
-      id: binary-check
-      continue-on-error: true # Ensure full audit completion even on failure
-      shell: powershell
-      run: |
-        $sdkHome = $env:SDK_HOME
-        $compliancePassed = $true
-        
-        # Define the exact architectures Chromium evaluates during build setups
-        $architectures = @("x64", "arm64", "x86")
-        
-        Write-Host "========================================================="
-        Write-Host "        RUNNING COMPLIANCE CHECKS PER TARGET ARCH"
-        Write-Host "========================================================="
-        
-        foreach ($arch in $architectures) {
-            $targetCdb = Join-Path $sdkHome "Debuggers\$arch\cdb.exe"
-            $targetDbgHelp = Join-Path $sdkHome "Debuggers\$arch\dbghelp.dll"
-            
-            $cdbExists = Test-Path $targetCdb
-            $dbgHelpExists = Test-Path $targetDbgHelp
-            
-            Write-Host "Architecture Group [$arch]:"
-            Write-Host "  -> cdb.exe:     $cdbExists ($targetCdb)"
-            Write-Host "  -> dbghelp.dll: $dbgHelpExists ($targetDbgHelp)"
-            
-            if (-not $cdbExists -or -not $dbgHelpExists) {
-                $compliancePassed = $false
-                Write-Warning "  [MISSING] Toolchain for arch [$arch] is incomplete."
-            } else {
-                Write-Host "  [OK] Toolchain for arch [$arch] is healthy."
-            }
-            Write-Host "---------------------------------------------------------"
-        }
-        
-        if (-not $compliancePassed) {
-            echo "COMPLIANCE_STATUS=FAILED" >> $env:GITHUB_ENV
-            throw "Toolchain Validation Failed: Missing required debugger files."
-        } else {
-            echo "COMPLIANCE_STATUS=PASSED" >> $env:GITHUB_ENV
-            Write-Host "SUCCESS: System passes all target path conditions."
-        }
-
-    - name: 3. Execution Summary and Assert Final Outcome
-      shell: powershell
-      run: |
-        Write-Host "========================================================="
-        Write-Host "               FINAL EVALUATION SUMMARY"
-        Write-Host "========================================================="
-        Write-Host "Status Flag detected: $env:COMPLIANCE_STATUS"
-        
-        if ($env:COMPLIANCE_STATUS -eq "FAILED") {
-            Write-Output "--------------------------------------------------------"
-            Write-Output "CRITICAL FAILURE: ISSUE #14061 DETECTED IN LOGS!"
-            Write-Output "ERROR at //build/toolchain/win/BUILD.gn"
-            Write-Output "You must install Windows 10 SDK version 10.0.26100.0 including the 'Debugging Tools for Windows' feature."
-            Write-Output "--------------------------------------------------------"
-            exit 1
-        } else {
-            Write-Host "100% FIXED: Image meets code constraints. Safe to merge."
-            exit 0
-        }
+      - name: Check System Architecture
+        shell: bash
+        run: |
+          echo "Python platform.machine(): $(python -c 'import platform; print(platform.machine())')"
+          echo "Python platform.architecture(): $(python -c 'import platform; print(platform.architecture())')"
+          echo "Python platform.processor(): $(python -c 'import platform; print(platform.processor())')"
+          echo "PowerShell \$env:PROCESSOR_ARCHITECTURE: $PROCESSOR_ARCHITECTURE"
+          echo "PowerShell \$env:PROCESSOR_IDENTIFIER: $PROCESSOR_IDENTIFIER"
