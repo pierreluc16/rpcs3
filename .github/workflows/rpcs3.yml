@@ -1,31 +1,44 @@
 name: Check System Architecture - Windows 11 ARM
 
 on:
-  workflow_dispatch: # Allows you to trigger this workflow manually from the Actions tab
+  workflow_dispatch: # Manual trigger
 
 jobs:
   check-architecture:
-    runs-on: windows-11-arm # Targets GitHub's hosted Windows 11 ARM64 virtual machines
+    runs-on: windows-11-arm
 
     steps:
-      - name: Delete ARM Python versions (Keep x64)
+      - name: Force Purge ARM Python From Environment and Cache
         shell: pwsh
         run: |
-          # Locate the default Python directory in the GitHub hosted toolcache
-          $toolcacheDir = "$env:AGENT_TOOLSDIRECTORY\Python"
+          Write-Host "=== Purging ARM Python Environments ==="
           
+          # 1. Clean up and filter the current Process PATH
+          $currentPath = [Environment]::GetEnvironmentVariable("Path", "Process")
+          $pathElements = $currentPath -split ";"
+          
+          # Filter out paths containing "Python" and "arm" or "aarch"
+          $filteredElements = $pathElements | Where-Object {
+              -not ($_ -like "*Python*arm*" -or $_ -like "*Python*aarch*")
+          }
+          
+          $newPath = $filteredElements -join ";"
+          [Environment]::SetEnvironmentVariable("Path", $newPath, "Process")
+          
+          # 2. Force delete folders out of the ToolCache if they exist
+          $toolcacheDir = "$env:AGENT_TOOLSDIRECTORY\Python"
           if (Test-Path $toolcacheDir) {
-              # Find and loop through all pre-installed Python version folders
               Get-ChildItem $toolcacheDir -Directory | ForEach-Object {
-                  # Check if the folder name specifies an arm or aarch architecture
                   if ($_.Name -like "*arm*" -or $_.Name -like "*aarch*") {
-                      Write-Host "Removing native ARM installation folder: $($_.FullName)"
-                      Remove-Item -Path $_.FullName -Recurse -Force
+                      Write-Host "Deleting Toolcache: $($_.FullName)"
+                      Remove-Item -Path $_.FullName -Recurse -Force -ErrorAction SilentlyContinue
                   }
               }
-          } else {
-              Write-Host "The Python toolcache directory does not exist or is empty."
           }
+          
+          # 3. Output the updated Path to GitHub Environment to persist into subsequent steps
+          echo "PATH=$newPath" >> $env:GITHUB_ENV
+          Write-Host "ARM Python paths successfully purged from the environment."
 
       - name: Check System Architecture
         shell: bash
