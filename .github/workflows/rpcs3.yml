@@ -1,35 +1,62 @@
-name: Reproduce Chromium SDK Missing Tool Bug
+name: 100% Verification - SDK Debugger Fix Assert
 
 on:
-  workflow_dispatch: # Allows manual trigger from GitHub UI
+  push:
+    branches: [ main ]
+  workflow_dispatch: # Allows manual verification at any time from the GitHub UI
 
 jobs:
-  assert-bug:
-    runs-on: windows-11-arm
+  assert-image-compliance:
+    runs-on: windows-11-arm # Target platform matching issue #14061
 
     steps:
-    - name: Assert Chromium Toolchain Prerequisites
+    - name: Run Strict Environment Assertions
       shell: powershell
       run: |
-        Write-Host "Simulating vs_toolchain.py sanity check for Chromium..."
+        Write-Host "================================================================"
+        Write-Host "STARTING 100% VERIFICATION SCAN FOR CHROMIUM TOOLCHAIN COMPLIANCE"
+        Write-Host "================================================================"
         
-        # Chromium looks for cdb.exe to verify the 'Debugging Tools for Windows' feature
-        $expectedCdbX64 = "C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\cdb.exe"
-        $expectedCdbArm = "C:\Program Files (x86)\Windows Kits\10\Debuggers\arm64\cdb.exe"
+        # 1. Dynamically locate the Windows 10/11 KitsRoot installation directory
+        $sdkReg = Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows Kits\Installed Roots" -ErrorAction SilentlyContinue
+        if (-not $sdkReg -or -not $sdkReg.KitsRoot10) {
+            Write-Error "CRITICAL VERIFICATION FAILURE: Windows Kits Root directory registry key cannot be found."
+            exit 1
+        }
         
-        $x64Exists = Test-Path $expectedCdbX64
-        $armExists = Test-Path $expectedCdbArm
+        $baseSdkPath = $sdkReg.KitsRoot10
+        Write-Host "Located Active SDK Home at: $baseSdkPath"
+
+        # 2. Map target architecture validation targets required by Chromium vs_toolchain.py
+        $cdbX64Path   = Join-Path $baseSdkPath "Debuggers\x64\cdb.exe"
+        $cdbArm64Path = Join-Path $baseSdkPath "Debuggers\arm64\cdb.exe"
         
-        Write-Host "Checking path: $expectedCdbX64 -> Status: $x64Exists"
-        Write-Host "Checking path: $expectedCdbArm -> Status: $armExists"
+        Write-Host "Asserting binary presence: $cdbX64Path"
+        $x64Exists = Test-Path $cdbX64Path
         
-        if (-not $x64Exists -and -not $armExists) {
-            Write-Output "--------------------------------------------------------"
-            Write-Output "ERROR at //build/toolchain/win/BUILD.gn:24:3:"
-            Write-Output "Script returned non-zero exit code."
-            Write-Output "You must install Windows 10 SDK version 10.0.26100.0 including the 'Debugging Tools for Windows' feature."
-            Write-Output "--------------------------------------------------------"
+        Write-Host "Asserting binary presence: $cdbArm64Path"
+        $arm64Exists = Test-Path $cdbArm64Path
+
+        Write-Host "----------------------------------------------------------------"
+        Write-Host "VERIFICATION RESULTS:"
+        Write-Host "  -> x64 Windows Debugger (cdb.exe): $x64Exists"
+        Write-Host "  -> ARM64 Windows Debugger (cdb.exe): $arm64Exists"
+        Write-Host "----------------------------------------------------------------"
+
+        # 3. Final Evaluation Logic
+        if ($x64Exists -and $arm64Exists) {
+            Write-Host "SUCCESS: BOTH REQUIRED DEBUGGER TOOLCHAINS DETECTED!"
+            Write-Host "The underlying image is 100% FIXED. Chromium builds will generate normally."
+            exit 0
+        } elseif ($x64Exists -or $arm64Exists) {
+            Write-Warning "PARTIAL FIX DETECTED: One platform binary is missing. Cross-compilation may fail."
+            Write-Error "ERROR: Compilation environment is incomplete."
             exit 1
         } else {
-            Write-Output "Verification passed unexpectedly. Bug might be resolved on this image."
+            Write-Output "=========================================================================================="
+            Write-Output "VERIFICATION FAILED: ISSUE #14061 IS STILL PRESENT!"
+            Write-Output "ERROR at //build/toolchain/win/BUILD.gn:24:3: Script returned non-zero exit code."
+            Write-Output "You must install Windows 10 SDK version 10.0.26100.0 including the 'Debugging Tools for Windows' feature."
+            Write-Output "=========================================================================================="
+            exit 1
         }
