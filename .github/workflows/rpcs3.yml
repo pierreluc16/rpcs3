@@ -1,56 +1,23 @@
-name: Check System Architecture - Windows 11 ARM
+name: Check System Architecture
 
 on:
-  workflow_dispatch: # Manual trigger from Actions tab
+  push:
+    branches: [ main ]
+  workflow_dispatch:
 
 jobs:
-  check-architecture:
+  check-arch:
+    # Target your Windows 11 ARM runner group
     runs-on: windows-11-arm
 
     steps:
-      - name: Hard Delete All Pythons Except Target x64
-        shell: pwsh
-        run: |
-          Write-Host "=== Starting Total Python Deletion ==="
-          
-          # Absolute target to shield from deletion
-          $protectedExe = "C:\hostedtoolcache\windows\Python\3.13.14\x64\python.exe"
-          $protectedDir = "C:\hostedtoolcache\windows\Python\3.13.14\x64"
-          $protectedScripts = "C:\hostedtoolcache\windows\Python\3.13.14\x64\Scripts"
-
-          # 1. Look for all python.exe instances across typical toolcaches and profiles
-          # Excluding our exact designated path
-          Get-ChildItem -Path "C:\hostedtoolcache", "C:\Program Files", "$env:USERPROFILE" -Recurse -Include "python.exe" -File -ErrorAction SilentlyContinue | ForEach-Object {
-              if ($_.FullName -ne $protectedExe) {
-                  $parentFolder = $_.Directory.FullName
-                  Write-Host "Purging alternative Python directory: $parentFolder"
-                  # Obliterate the entire binary suite folder hosting that specific python instance
-                  Remove-Item -Path $parentFolder -Recurse -Force -ErrorAction SilentlyContinue
-              }
-          }
-
-          # 2. Re-engineer the environment PATH variable
-          $currentPath = [Environment]::GetEnvironmentVariable("Path", "Process")
-          $pathElements = $currentPath -split ";"
-          
-          # Clean out any old/default Python paths entirely
-          $filteredElements = $pathElements | Where-Object { $_ -notlike "*Python*" }
-          
-          # Force inject ONLY the protected x64 paths into priority indexes
-          $newPath = @($protectedDir, $protectedScripts) + $filteredElements -join ";"
-          
-          # Apply environment mutations instantly to the active process
-          [Environment]::SetEnvironmentVariable("Path", $newPath, "Process")
-          
-          # Export to the shared GitHub Env pool so the next Bash step is forced to inherit it
-          echo "PATH=$newPath" >> $env:GITHUB_ENV
-          Write-Host "All other Python installations have been scrubbed."
-
-      - name: Check System Architecture
-        shell: bash
-        run: |
-          echo "Python platform.machine(): $(python -c 'import platform; print(platform.machine())')"
-          echo "Python platform.architecture(): $(python -c 'import platform; print(platform.architecture())')"
-          echo "Python platform.processor(): $(python -c 'import platform; print(platform.processor())')"
-          echo "PowerShell \$env:PROCESSOR_ARCHITECTURE: $PROCESSOR_ARCHITECTURE"
-          echo "PowerShell \$env:PROCESSOR_IDENTIFIER: $PROCESSOR_IDENTIFIER"
+    - name: Check System Architecture
+      shell: bash
+      run: |
+        # Explicit Windows path forcing the x64 binary under emulation
+        TARGET_PYTHON="C:\\hostedtoolcache\\windows\\Python\\3.13.14\\x64\\python.exe"
+        
+        echo "=== Executing Target Python Architecture Checks ==="
+        echo "Python platform.machine(): $($TARGET_PYTHON -c 'import platform; print(platform.machine())')"
+        echo "Python platform.architecture(): $($TARGET_PYTHON -c 'import platform; print(platform.architecture())')"
+        echo "Python platform.processor(): $($TARGET_PYTHON -c 'import platform; print(platform.processor())')"
