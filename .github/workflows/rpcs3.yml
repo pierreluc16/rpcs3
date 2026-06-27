@@ -1,39 +1,66 @@
-name: Absolute Verification Fix for #14061
+name: Test Real Chromium Depot_Tools Failure
+
 on:
-  workflow_dispatch:
+  push:
+    branches: [ main ]
+  workflow_dispatch: # Allows manual pipeline triggering from the GitHub UI
 
 jobs:
-  test_chromium_toolchain:
-    runs-on: windows-11-arm
-    steps:
-      - name: 1. Clone Chromium Build Toolchain Configuration Scripts
-        shell: pwsh
-        run: |
-          Write-Host "Cloning minimal required build files directly from upstream Chromium..."
-          # FIXED: Added the complete URL to prevent the fatal repository not found crash
-          git clone --depth 1 --sparse --filter=blob:none https://github.com chromium_tools
-          cd chromium_tools
-          git sparse-checkout set tools/win build/toolchain/win
+  reproduce-real-google-tools:
+    runs-on: windows-11-arm64
 
-      - name: 2. Execute Real Upstream Toolchain Check Script
-        shell: pwsh
-        run: |
-          cd chromium_tools
-          
-          # Set mock environment variables that the script expects during a normal 'gn gen' build phase
-          $env:DEPOT_TOOLS_WIN_TOOLCHAIN = "0"
-          
-          Write-Host "Running vs_toolchain.py to verify system SDK integrity..."
-          
-          # This executes the real, unedited check script that triggers the error on broken images
-          python tools/win/vs_toolchain.py SetEnvironmentAndGetRuntimeDllDirs
-          
-          if ($LASTEXITCODE -eq 0) {
-              Write-Host "================================================================"
-              Write-Host "100% CONFIRMED FIXED: The script executed with exit code 0."
-              Write-Host "The Debugging Tools for Windows are perfectly installed on ARM64."
-              Write-Host "================================================================"
-          } else {
-              # If the script fails, it automatically throws the exact non-zero exit error block
-              exit $LASTEXITCODE
-          }
+    steps:
+    - name: Checkout Source Context
+      uses: actions/checkout@v4
+
+    - name: Step 1 - Clone and Initialize Google Depot Tools
+      shell: cmd
+      run: |
+        echo Cloning official Chromium depot_tools repository...
+        git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git C:\depot_tools
+        
+        echo Appending depot_tools to the front of system PATH...
+        echo C:\depot_tools>> %GITHUB_PATH%
+
+    - name: Step 2 - Bootstrap gclient and Python
+      shell: cmd
+      env:
+        # Prevent depot_tools from auto-updating during initialization steps if needed
+        DEPOT_TOOLS_UPDATE: 1
+      run: |
+        cd C:\depot_tools
+        echo Forcing first-run bootstrap to download Python, GN, and Ninja...
+        :: Running gclient with no args downloads Windows specific tools required by Google
+        call gclient
+        
+    - name: Step 3 - Simulate Chromium Project Environment
+      shell: cmd
+      run: |
+        echo Creating a mock workspace for a Chromium engine setup...
+        mkdir C:\chromium_repro
+        cd C:\chromium_repro
+        
+        echo Generating a dummy workspace configuration (.gclient)...
+        (
+        echo solutions = [
+        echo   {
+        echo     "name": "src",
+        echo     "url": "https://googlesource.com",
+        echo     "deps_file": "DEPS",
+        echo     "managed": False,
+        echo   },
+        echo ]
+        ) > .gclient
+
+    - name: Step 4 - Force Local SDK Evaluation (Triggers Bug #14061)
+      shell: cmd
+      env:
+        # CRITICAL: Forces Google to evaluate the runner's native Windows SDK package
+        DEPOT_TOOLS_WIN_TOOLCHAIN: 0
+      run: |
+        cd C:\depot_tools
+        echo Directing Python execution straight into Google's real validation tool...
+        
+        :: Executing the isolated toolchain validator packaged inside depot_tools.
+        :: This invokes the real code blocking your builds.
+        python win_toolchain.py
