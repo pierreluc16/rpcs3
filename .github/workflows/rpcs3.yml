@@ -9,7 +9,7 @@ on:
 
 jobs:
   check-arch:
-    # Target the official GitHub Windows 11 ARM64 image
+    # Target the official GitHub Windows 11 ARM image
     runs-on: windows-11-arm
 
     steps:
@@ -19,7 +19,14 @@ jobs:
     - name: Check System Architecture
       shell: bash
       run: |
-        # Explicitly declare paths inside subshell interpolation to prevent falling back to the native host alias
-        echo "Python platform.machine(): $("C:\hostedtoolcache\windows\Python\3.13.14\x64\python.exe" -c 'import platform; print(platform.machine())')"
-        echo "Python platform.architecture(): $("C:\hostedtoolcache\windows\Python\3.13.14\x64\python.exe" -c 'import platform; print(platform.architecture())')"
-        echo "Python platform.processor(): $("C:\hostedtoolcache\windows\Python\3.13.14\x64\python.exe" -c 'import platform; print(platform.processor())')"
+        # Call the absolute target path directly inside the print block.
+        # This allows Windows Prism Emulation to accurately intercept the x64 binary execution.
+        
+        echo "Python platform.machine():"
+        "C:\hostedtoolcache\windows\Python\3.13.14\x64\python.exe" -c "import platform; print(platform.machine())"
+        
+        echo "Python platform.architecture():"
+        "C:\hostedtoolcache\windows\Python\3.13.14\x64\python.exe" -c "import platform; print(platform.architecture())"
+        
+        echo "Python platform.processor():"
+        "C:\hostedtoolcache\windows\Python\3.13.14\x64\python.exe" -c "import platform; print(platform.processor())"
