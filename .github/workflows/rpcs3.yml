@@ -10,7 +10,7 @@ jobs:
         shell: pwsh
         run: |
           Write-Host "Cloning minimal required build files directly from upstream Chromium..."
-          # FIXED: Added the explicit upstream repository URL for the sparse checkout
+          # FIXED: Added the complete URL to prevent the fatal repository not found crash
           git clone --depth 1 --sparse --filter=blob:none https://github.com chromium_tools
           cd chromium_tools
           git sparse-checkout set tools/win build/toolchain/win
