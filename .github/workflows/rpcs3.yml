@@ -1,23 +1,23 @@
-name: Check System Architecture
+name: System Architecture Check
 
 on:
   push:
+    branches: [ main ]
+  pull_request:
     branches: [ main ]
   workflow_dispatch:
 
 jobs:
   check-arch:
-    # Target your Windows 11 ARM runner group
     runs-on: windows-11-arm
 
     steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
     - name: Check System Architecture
       shell: bash
       run: |
-        # Explicit Windows path forcing the x64 binary under emulation
-        TARGET_PYTHON="C:\\hostedtoolcache\\windows\\Python\\3.13.14\\x64\\python.exe"
-        
-        echo "=== Executing Target Python Architecture Checks ==="
-        echo "Python platform.machine(): $($TARGET_PYTHON -c 'import platform; print(platform.machine())')"
-        echo "Python platform.architecture(): $($TARGET_PYTHON -c 'import platform; print(platform.architecture())')"
-        echo "Python platform.processor(): $($TARGET_PYTHON -c 'import platform; print(platform.processor())')"
+        "C:\hostedtoolcache\windows\Python\3.13.14\x64\python.exe" -c "import platform; print('Python platform.machine():', platform.machine())"
+        "C:\hostedtoolcache\windows\Python\3.13.14\x64\python.exe" -c "import platform; print('Python platform.architecture():', platform.architecture())"
+        "C:\hostedtoolcache\windows\Python\3.13.14\x64\python.exe" -c "import platform; print('Python platform.processor():', platform.processor())"
