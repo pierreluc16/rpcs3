@@ -5,7 +5,7 @@ on:
 
 jobs:
   assert-bug:
-    runs-on: windows-11-arm64
+    runs-on: windows-11-arm
 
     steps:
     - name: Assert Chromium Toolchain Prerequisites
