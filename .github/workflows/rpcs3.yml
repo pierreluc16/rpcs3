@@ -1,18 +1,19 @@
 name: Brew Double Update
 
 on:
-push:
-workflow_dispatch:
+  push:
+  workflow_dispatch:
 
 jobs:
-brew:
-strategy:
-matrix:
-os: [macos-15, ubuntu-24.04, ubuntu-24.04-arm]
-runs-on: ${{ matrix.os }}
-steps:
-# Exposes Homebrew to the PATH on Ubuntu runners
-- name: Set up Homebrew
-uses: Homebrew/actions/setup-homebrew@main
-  - name: Run brew update twice
-    run: brew update && brew update
+  brew:
+    strategy:
+      matrix:
+        os: [macos-15, ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.os }}
+    steps:
+      # Exposes Homebrew to the PATH on Ubuntu runners
+      - name: Set up Homebrew
+        uses: Homebrew/actions/setup-homebrew@main
+
+      - name: Run brew update twice
+        run: brew update && brew update
