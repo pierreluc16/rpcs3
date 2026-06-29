@@ -1,42 +1,18 @@
 name: Brew Double Update
 
 on:
-  push:
-  workflow_dispatch:
+push:
+workflow_dispatch:
 
 jobs:
-  brew:
-    runs-on: macos-15
-    steps:
-      - name: Force Purge, Install, and Lock Homebrew 5.0.0
-        run: |
-          # 1. Local Purge: Forcibly delete existing directories without relying on network scripts
-          sudo rm -rf /opt/homebrew
-          sudo rm -rf /usr/local/Homebrew
-          sudo rm -rf /usr/local/Cellar
-          sudo rm -rf /usr/local/var/homebrew
-          
-          # 2. Hardened Installer Download: Force IPv4 to bypass intermittent macOS runner DNS bugs
-          NONINTERACTIVE=1 /bin/bash -c "$(curl -4 -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-
-          # 3. Export Homebrew paths to the GitHub Actions environment
-          /opt/homebrew/bin/brew shellenv >> $GITHUB_ENV
-          
-          # 4. Load them locally for the immediate context of this step
-          eval "$(/opt/homebrew/bin/brew shellenv)"
-
-          # 5. Navigate to Homebrew repository core and switch to 5.0.0
-          cd "$(brew --repository)"
-          git fetch --tags
-          git checkout tags/5.0.0
-
-          # 6. Verify version mapping matches exactly
-          brew --version
-
-      - name: Run brew update twice
-        run: |
-          # The paths are automatically loaded via $GITHUB_ENV from the step above
-          brew --version
-          
-          # Execute step checks
-          brew update && brew update
+brew:
+strategy:
+matrix:
+os: [macos-15, ubuntu-24.04, ubuntu-24.04-arm]
+runs-on: ${{ matrix.os }}
+steps:
+# Exposes Homebrew to the PATH on Ubuntu runners
+- name: Set up Homebrew
+uses: Homebrew/actions/setup-homebrew@main
+  - name: Run brew update twice
+    run: brew update && brew update
