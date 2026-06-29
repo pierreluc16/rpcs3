@@ -11,35 +11,33 @@ jobs:
       - name: Purge, Install, and Lock Homebrew 5.0.0
         run: |
           # 1. Clean out existing environments safely 
-          # GitHub runner instances have Homebrew pre-cached, which we must reset
-          NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/uninstall.sh)" || true
+          NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://githubusercontent.com)" || true
           sudo rm -rf /opt/homebrew
           sudo rm -rf /usr/local/Homebrew
           sudo rm -rf /usr/local/Cellar
           sudo rm -rf /usr/local/var/homebrew
 
-          # 2. Run official script to regenerate structure and paths
-          NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+          # 2. Run official installer script
+          NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://githubusercontent.com)"
 
-          # 3. Export global pathing variables for downstream tasks
-          echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> $GITHUB_ENV
+          # 3. Correctly export Homebrew paths to GitHub Actions environment
+          /opt/homebrew/bin/brew shellenv >> $GITHUB_ENV
+          
+          # 4. Load them locally for the remainder of this step
           eval "$(/opt/homebrew/bin/brew shellenv)"
 
-          # 4. Target the specific git checkout tag for release 5.0.0
+          # 5. Target the specific git checkout tag for release 5.0.0
           cd "$(brew --repository)"
           git fetch --tags
           git checkout tags/5.0.0
 
-          # 5. Output state to confirm locking
+          # 6. Output state to confirm locking
           brew --version
 
       - name: Run brew update twice
         run: |
-          # Re-initialize paths locally within this step context
-          eval "$(/opt/homebrew/bin/brew shellenv)"
-
-          # Optional: Prevent automatic forward-upgrading if your goal is strict 5.0.0 validation
-          # export HOMEBREW_NO_AUTO_UPDATE=1
-
+          # The paths are now automatically loaded via $GITHUB_ENV from the previous step
+          brew --version
+          
           # Execute step checks
           brew update && brew update
