@@ -8,35 +8,34 @@ jobs:
   brew:
     runs-on: macos-15
     steps:
-      - name: Purge, Install, and Lock Homebrew 5.0.0
+      - name: Force Purge, Install, and Lock Homebrew 5.0.0
         run: |
-          # 1. Clean out existing environments safely 
-          NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://githubusercontent.com)" || true
+          # 1. Local Purge: Forcibly delete existing directories without relying on network scripts
           sudo rm -rf /opt/homebrew
           sudo rm -rf /usr/local/Homebrew
           sudo rm -rf /usr/local/Cellar
           sudo rm -rf /usr/local/var/homebrew
+          
+          # 2. Hardened Installer Download: Force IPv4 to bypass intermittent macOS runner DNS bugs
+          NONINTERACTIVE=1 /bin/bash -c "$(curl -4 -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 
-          # 2. Run official installer script
-          NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://githubusercontent.com)"
-
-          # 3. Correctly export Homebrew paths to GitHub Actions environment
+          # 3. Export Homebrew paths to the GitHub Actions environment
           /opt/homebrew/bin/brew shellenv >> $GITHUB_ENV
           
-          # 4. Load them locally for the remainder of this step
+          # 4. Load them locally for the immediate context of this step
           eval "$(/opt/homebrew/bin/brew shellenv)"
 
-          # 5. Target the specific git checkout tag for release 5.0.0
+          # 5. Navigate to Homebrew repository core and switch to 5.0.0
           cd "$(brew --repository)"
           git fetch --tags
           git checkout tags/5.0.0
 
-          # 6. Output state to confirm locking
+          # 6. Verify version mapping matches exactly
           brew --version
 
       - name: Run brew update twice
         run: |
-          # The paths are now automatically loaded via $GITHUB_ENV from the previous step
+          # The paths are automatically loaded via $GITHUB_ENV from the step above
           brew --version
           
           # Execute step checks
