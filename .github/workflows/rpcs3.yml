@@ -1,19 +1,11 @@
-name: Brew Double Update
+name: Windows 11 ARM Launcher Check
 
-on:
-  push:
-  workflow_dispatch:
+on: [push, pull_request, workflow_dispatch]
 
 jobs:
-  brew:
-    strategy:
-      matrix:
-        os: [macos-15, ubuntu-24.04, ubuntu-24.04-arm]
-    runs-on: ${{ matrix.os }}
-    steps:
-      # Exposes Homebrew to the PATH on Ubuntu runners
-      - name: Set up Homebrew
-        uses: Homebrew/actions/setup-homebrew@main
+  check-inventory:
+    runs-on: windows-11-vs2026-arm
 
-      - name: Run brew update twice
-        run: brew update && brew update
+    steps:
+      - name: List Launcher Inventory
+        run: py -0p
