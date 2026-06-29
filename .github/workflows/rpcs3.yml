@@ -8,38 +8,38 @@ jobs:
   brew:
     runs-on: macos-15
     steps:
-      - name: Purge Homebrew
+      - name: Purge, Install, and Lock Homebrew 5.0.0
         run: |
-          # Remove the pre-installed runner instance
-          NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://githubusercontent.com)"
+          # 1. Clean out existing environments safely 
+          # GitHub runner instances have Homebrew pre-cached, which we must reset
+          NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/uninstall.sh)" || true
           sudo rm -rf /opt/homebrew
           sudo rm -rf /usr/local/Homebrew
           sudo rm -rf /usr/local/Cellar
           sudo rm -rf /usr/local/var/homebrew
 
-      - name: Install Specific Homebrew 5.0.0
-        run: |
-          # Set up directory for Apple Silicon (macos-15)
-          sudo mkdir -p /opt/homebrew
-          sudo chown -R $USER:admin /opt/homebrew
-          
-          # Clone targeting the exact 5.0.0 tag
-          git clone --depth 1 --branch 5.0.0 https://github.com /opt/homebrew/Homebrew
-          
-          # Link the binary to the execution path
-          mkdir -p /opt/homebrew/bin
-          ln -s /opt/homebrew/Homebrew/bin/brew /opt/homebrew/bin/brew
-          
-          # Inject Homebrew environment variables into GitHub global scope
+          # 2. Run official script to regenerate structure and paths
+          NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+          # 3. Export global pathing variables for downstream tasks
           echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> $GITHUB_ENV
+          eval "$(/opt/homebrew/bin/brew shellenv)"
+
+          # 4. Target the specific git checkout tag for release 5.0.0
+          cd "$(brew --repository)"
+          git fetch --tags
+          git checkout tags/5.0.0
+
+          # 5. Output state to confirm locking
+          brew --version
 
       - name: Run brew update twice
         run: |
-          # Load environment variables for the current step
+          # Re-initialize paths locally within this step context
           eval "$(/opt/homebrew/bin/brew shellenv)"
-          
-          # Display the version to verify it is exactly 5.0.0
-          brew --version
-          
-          # Execute your double update
+
+          # Optional: Prevent automatic forward-upgrading if your goal is strict 5.0.0 validation
+          # export HOMEBREW_NO_AUTO_UPDATE=1
+
+          # Execute step checks
           brew update && brew update
