@@ -1,11 +1,45 @@
-name: Windows 11 ARM Launcher Check
+name: Brew Double Update
 
-on: [push, pull_request, workflow_dispatch]
+on:
+  push:
+  workflow_dispatch:
 
 jobs:
-  check-inventory:
-    runs-on: windows-11-vs2026-arm
-
+  brew:
+    runs-on: macos-15
     steps:
-      - name: List Launcher Inventory
-        run: py -0p
+      - name: Purge Homebrew
+        run: |
+          # Remove the pre-installed runner instance
+          NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://githubusercontent.com)"
+          sudo rm -rf /opt/homebrew
+          sudo rm -rf /usr/local/Homebrew
+          sudo rm -rf /usr/local/Cellar
+          sudo rm -rf /usr/local/var/homebrew
+
+      - name: Install Specific Homebrew 5.0.0
+        run: |
+          # Set up directory for Apple Silicon (macos-15)
+          sudo mkdir -p /opt/homebrew
+          sudo chown -R $USER:admin /opt/homebrew
+          
+          # Clone targeting the exact 5.0.0 tag
+          git clone --depth 1 --branch 5.0.0 https://github.com /opt/homebrew/Homebrew
+          
+          # Link the binary to the execution path
+          mkdir -p /opt/homebrew/bin
+          ln -s /opt/homebrew/Homebrew/bin/brew /opt/homebrew/bin/brew
+          
+          # Inject Homebrew environment variables into GitHub global scope
+          echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> $GITHUB_ENV
+
+      - name: Run brew update twice
+        run: |
+          # Load environment variables for the current step
+          eval "$(/opt/homebrew/bin/brew shellenv)"
+          
+          # Display the version to verify it is exactly 5.0.0
+          brew --version
+          
+          # Execute your double update
+          brew update && brew update
