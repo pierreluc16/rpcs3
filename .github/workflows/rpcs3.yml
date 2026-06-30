@@ -6,7 +6,7 @@ on:
 
 jobs:
   brew:
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
       - name: Run brew update twice
         run: brew update && brew update
