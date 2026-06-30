@@ -12,10 +12,7 @@ matrix:
 os: [macos-14, macos-15, macos-26]
 runs-on: ${{ matrix.os }}
 steps:
-
-name: Set up Homebrew
+- name: Set up Homebrew
 uses: Homebrew/actions/setup-homebrew@main
-
-name: Run brew update twice
-
-run: brew update && brew update
+  - name: Run brew update twice
+    run: brew update && brew update
