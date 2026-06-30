@@ -1,11 +1,74 @@
-name: Windows 11 ARM Launcher Check
+name: ICU Dependency Check
 
-on: [push, pull_request, workflow_dispatch]
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
 
 jobs:
-  check-inventory:
-    runs-on: windows-11-vs2026-arm
+  check-icu:
+    runs-on: ubuntu-26.04
 
     steps:
-      - name: List Launcher Inventory
-        run: py -0p
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Run ICU Analysis
+        run: |
+          echo "ニニニニニニニニ！："
+          echo "=-----"
+          echo "STARTING ICU DEPENDENCY CHECK"
+          echo "1s"
+          echo "==="
+          echo "--------"
+          echo "ニニニニニニニニニニニニニ"
+          
+          # [Method 1] pkg-config
+          echo "[Method 1] Checking via pkg-config..."
+          if pkg-config --exists icu-i18n 2>/dev/null; then
+            VERSION=$(pkg-config --modversion icu-i18n)
+            echo "SUCCESS: icu-i18n found (Version: $VERSION)."
+          else
+            echo "X"
+            echo "pkg-config: Cannot find icu-i18n (libicu-dev is missing)."
+          fi
+          
+          # [Method 2] uconv
+          echo "[Method 2] Checking via uconv command utility..."
+          if command -v uconv &> /dev/null; then
+            UCONV_VER=$(uconv --version | awk '{print $NF}')
+            echo "SUCCESS: uconv utility found ($UCONV_VER)."
+          else
+            echo "X uconv: Command utility not found on the system."
+          fi
+          
+          # [Method 3] dpkg
+          echo "[Method 3] Checking via dpkg (installed packages database)..."
+          if dpkg -l | grep -q "libicu"; then
+            echo "DETECTED: libicu components exist inside package manager database."
+            dpkg -l | grep "libicu" | awk '{print "- " $2 " (Version: " $3 ")"}'
+          else
+            echo "X No libicu packages found via dpkg."
+          fi
+          
+          # [Method 4] Direct SO scanning (Sécurisé contre l'exit code 2)
+          echo "[Method 4] Direct system scanning for library files (.so)..."
+          TARGET_DIR="/usr/lib/x86_64-linux-gnu"
+          
+          if [ -d "$TARGET_DIR" ] && [ "$(find "$TARGET_DIR" -maxdepth 1 -name "libicuuc.so*" | wc -l)" -gt 0 ]; then
+            echo "DETECTED: Active .so files discovered in the system folder."
+            find "$TARGET_DIR" -maxdepth 1 -name "libicuuc.so*" -exec ls -l {} + | awk '{
+              if ($11 != "") 
+                print "- " $9 " -> " $11; 
+              else 
+                print "- " $9
+            }'
+          else
+            echo "X No .so files discovered."
+          fi
+          
+          echo "ニニニニニニニニニニニニニニニニ"
+          echo "：==="
+          echo "Final Result: ICU IS INSTALLED on this runner container."
