@@ -7,10 +7,13 @@ on:
 jobs:
   brew:
     strategy:
-      fail-fast: false
+      fail-fast: false # 👈 Prevents GitHub from canceling other matrix jobs if one fails
       matrix:
         os: [macos-14, macos-15, macos-26]
     runs-on: ${{ matrix.os }}
     steps:
+      - name: Set up Homebrew
+        uses: Homebrew/actions/setup-homebrew@main
+
       - name: Run brew update twice
         run: brew update && brew update
