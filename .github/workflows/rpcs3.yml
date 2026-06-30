@@ -1,7 +1,7 @@
 name: Brew Double Update
 on:
-push:
-workflow_dispatch:
+  push:
+  workflow_dispatch:
 
 jobs:
 brew:
