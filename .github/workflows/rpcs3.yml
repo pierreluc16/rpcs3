@@ -7,6 +7,7 @@ on:
 jobs:
   brew:
     strategy:
+      fail-fast: false # 👈 Prevents GitHub from canceling other matrix jobs if one fails
       matrix:
         os: [macos-14, macos-15, macos-26]
     runs-on: ${{ matrix.os }}
