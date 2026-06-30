@@ -9,7 +9,7 @@ jobs:
     strategy:
       fail-fast: false # 👈 Prevents GitHub from canceling other matrix jobs if one fails
       matrix:
-        os: [macos-14, macos-15, macos-26]
+        os: [ubuntu-24.04]
     runs-on: ${{ matrix.os }}
     steps:
       - name: Set up Homebrew
