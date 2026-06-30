@@ -4,7 +4,7 @@ on: [push, pull_request, workflow_dispatch]
 
 jobs:
   check-inventory:
-    runs-on: windows-11-arm
+    runs-on: windows-11-vs2026-arm
 
     steps:
       - name: List Launcher Inventory
