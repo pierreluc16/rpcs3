@@ -16,13 +16,6 @@ jobs:
     - name: 📂 Checkout repository
       uses: actions/checkout@v4
 
-    - name: 🛠️ Install ICU development packages
-      run: |
-        echo "📥 Updating package lists..."
-        sudo apt-get update
-        echo "📦 Installing libicu-dev and uconv..."
-        sudo apt-get install -y libicu-dev uconv
-
     - name: 🔍 Run ICU Dependency Check
       run: |
         echo "========================================="
