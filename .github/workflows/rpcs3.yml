@@ -1,11 +1,19 @@
-name: Windows 11 ARM Launcher Check
+name: Brew Double Update
 
-on: [push, pull_request, workflow_dispatch]
+on:
+  push:
+  workflow_dispatch:
 
 jobs:
-  check-inventory:
-    runs-on: windows-11-vs2026-arm
-
+  brew:
+    strategy:
+      fail-fast: false # 👈 Prevents GitHub from canceling other matrix jobs if one fails
+      matrix:
+        os: [macos-14, macos-15, macos-26]
+    runs-on: ${{ matrix.os }}
     steps:
-      - name: List Launcher Inventory
-        run: py -0p
+      - name: Set up Homebrew
+        uses: Homebrew/actions/setup-homebrew@main
+
+      - name: Run brew update twice
+        run: brew update && brew update
