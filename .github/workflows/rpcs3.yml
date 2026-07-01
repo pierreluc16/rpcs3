@@ -25,7 +25,7 @@ jobs:
         DEV_MISSING=0
         DETECTED_VERSION=""
         
-        # Method 1: pkg-config (Updated advanced verification)
+        # Method 1: pkg-config
         if pkg-config --exists icu-i18n; then
           DETECTED_VERSION=$(pkg-config --modversion icu-i18n 2>/dev/null)
           
@@ -37,7 +37,7 @@ jobs:
           DEV_MISSING=$((DEV_MISSING + 1))
         fi
         
-        # Method 2: uconv
+        # Method 2: uconv (Updated layout to match Method 1)
         if command -v uconv &> /dev/null; then
           UCONV_VER=$(uconv -? 2>&1 | grep -oE "version [0-9.]+" | awk '{print $2}')
           
@@ -45,7 +45,10 @@ jobs:
             UCONV_VER=$(uconv --version 2>&1 | grep -oE "[0-9.]+" | head -n 1)
           fi
           
-          echo "✅ [Method 2] Checking via uconv utility... Found! (Version: $UCONV_VER)"
+          echo "✅ [Method 2] Checking via uconv utility... Found!"
+          echo "  - Command utility: uconv"
+          echo "  - Detected version: $UCONV_VER"
+          
           if [ -z "$DETECTED_VERSION" ] && [ ! -z "$UCONV_VER" ]; then
             DETECTED_VERSION=$UCONV_VER
           fi
