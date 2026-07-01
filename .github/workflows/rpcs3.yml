@@ -34,11 +34,18 @@ jobs:
           DEV_MISSING=$((DEV_MISSING + 1))
         fi
         
-        # Method 2: uconv (Clarifies if the system command utility exists)
+        # Method 2: uconv (Updated detection logic)
         if command -v uconv &> /dev/null; then
-          UCONV_VER=$(uconv -V | awk '{print $3}')
+          # Extract version safely; uconv often outputs its version details to stderr via '-?'
+          UCONV_VER=$(uconv -? 2>&1 | grep -oE "version [0-9.]+" | awk '{print $2}')
+          
+          # Fallback extraction pattern if 'version' keyword differs
+          if [ -z "$UCONV_VER" ]; then
+            UCONV_VER=$(uconv --version 2>&1 | grep -oE "[0-9.]+" | head -n 1)
+          fi
+          
           echo "✅ [Method 2] Checking via uconv utility... Found! (Version: $UCONV_VER)"
-          if [ -z "$DETECTED_VERSION" ]; then
+          if [ -z "$DETECTED_VERSION" ] && [ ! -z "$UCONV_VER" ]; then
             DETECTED_VERSION=$UCONV_VER
           fi
         else
@@ -67,7 +74,6 @@ jobs:
           echo "$SO_FILES" | sed 's/^/  - /'
           
           if [ -z "$DETECTED_VERSION" ]; then
-            # Extract main version number from the .so file extension matching your layout
             DETECTED_VERSION=$(echo "$SO_FILES" | head -n 1 | grep -oE "so\.[0-9]+" | cut -d'.' -f2)
           fi
         else
@@ -76,7 +82,7 @@ jobs:
         
         echo "========================================="
         
-        # Final output categorization matching your explicit message strings
+        # Final output categorization
         if [ ! -z "$DETECTED_VERSION" ]; then
           echo "📦 DETECTED ICU VERSION: $DETECTED_VERSION"
           
