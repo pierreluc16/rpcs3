@@ -15,4 +15,4 @@ brew:
     uses: Homebrew/actions/setup-homebrew@main
 
   - name: Run brew update twice
-    run: brew update && brew update             
+    run: brew update && brew update
