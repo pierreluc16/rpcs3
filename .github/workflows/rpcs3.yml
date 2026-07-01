@@ -1,19 +1,19 @@
-name: Brew Double Update
+name: Check Requirements
 
 on:
   push:
-  workflow_dispatch:
+  pull_request:
+  workflow_dispatch: # Allows manual triggering from the Actions tab
 
 jobs:
-  brew:
-    strategy:
-      fail-fast: false # 👈 Prevents GitHub from canceling other matrix jobs if one fails
-      matrix:
-        os: [macos-14, macos-15, macos-26]
-    runs-on: ${{ matrix.os }}
-    steps:
-      - name: Set up Homebrew
-        uses: Homebrew/actions/setup-homebrew@main
+  verify-dependencies:
+    runs-on: ubuntu-26.04
 
-      - name: Run brew update twice
-        run: brew update && brew update
+    steps:
+      - name: Check if libicu-dev is installed
+        run: |
+          if ! dpkg -s libicu-dev >/dev/null 2>&1; then
+            echo "Error: libicu-dev is missing!"
+            exit 1
+          fi
+          echo "libicu-dev is installed."
