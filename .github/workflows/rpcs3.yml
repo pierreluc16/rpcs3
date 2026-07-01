@@ -22,38 +22,36 @@ jobs:
         echo "🚀 STARTING ICU DEPENDENCY CHECK"
         echo "========================================="
         
-        # Track if development tools are missing
         DEV_MISSING=0
         DETECTED_VERSION=""
         
-        # Method 1: pkg-config
+        # Method 1: pkg-config (Clarifies if development headers exist)
         if pkg-config --exists icu-i18n; then
-          echo "✅ [Method 1] Checking via pkg-config... Found!"
-          # Attempt version extract from pkg-config
           DETECTED_VERSION=$(pkg-config --modversion icu-i18n 2>/dev/null)
+          echo "✅ [Method 1] Checking via pkg-config... Found! (Version: $DETECTED_VERSION)"
         else
-          echo "❌ [Method 1] Checking via pkg-config... Failed!"
+          echo "❌ [Method 1] Checking via pkg-config... Failed! (libicu-dev is missing)"
           DEV_MISSING=$((DEV_MISSING + 1))
         fi
         
-        # Method 2: uconv
+        # Method 2: uconv (Clarifies if the system command utility exists)
         if command -v uconv &> /dev/null; then
-          echo "✅ [Method 2] Checking via uconv utility... Found!"
+          UCONV_VER=$(uconv -V | awk '{print $3}')
+          echo "✅ [Method 2] Checking via uconv utility... Found! (Version: $UCONV_VER)"
           if [ -z "$DETECTED_VERSION" ]; then
-            DETECTED_VERSION=$(uconv -V | awk '{print $3}')
+            DETECTED_VERSION=$UCONV_VER
           fi
         else
-          echo "❌ [Method 2] Checking via uconv utility... Failed!"
+          echo "❌ [Method 2] Checking via uconv utility... Failed! (Command not found)"
           DEV_MISSING=$((DEV_MISSING + 1))
         fi
         
-        # Method 3: dpkg database scan (Determining exact version)
+        # Method 3: dpkg database scan (Determining package manager status)
         echo "🔍 [Method 3] Checking via dpkg database..."
         if dpkg -l | grep -q libicu; then
           echo "✅ libicu components exist inside package manager database."
           dpkg -l | grep libicu | awk '{print "  - " $2 " (Version: " $3 ")"}'
           
-          # Extract version from dpkg if not caught yet
           if [ -z "$DETECTED_VERSION" ]; then
             DETECTED_VERSION=$(dpkg -l | grep -E "libicu[0-9]+" | head -n 1 | awk '{print $3}' | cut -d'-' -f1)
           fi
@@ -61,15 +59,15 @@ jobs:
           echo "❌ No libicu packages found in dpkg database."
         fi
         
-        # Method 4: Scan system directories for active binary files
+        # Method 4: Scan system directories for raw binary layout (.so files)
         echo "🔍 [Method 4] Direct system scanning for library files..."
         SO_FILES=$(find /usr/lib -name "libicuuc.so.[0-9]*" 2>/dev/null)
         if [ ! -z "$SO_FILES" ]; then
           echo "✅ Active .so files discovered in the system folder."
           echo "$SO_FILES" | sed 's/^/  - /'
           
-          # Fallback version extraction from filename if other steps missed it
           if [ -z "$DETECTED_VERSION" ]; then
+            # Extract main version number from the .so file extension matching your layout
             DETECTED_VERSION=$(echo "$SO_FILES" | head -n 1 | grep -oE "so\.[0-9]+" | cut -d'.' -f2)
           fi
         else
@@ -78,7 +76,7 @@ jobs:
         
         echo "========================================="
         
-        # Final evaluation logic summary
+        # Final output categorization matching your explicit message strings
         if [ ! -z "$DETECTED_VERSION" ]; then
           echo "📦 DETECTED ICU VERSION: $DETECTED_VERSION"
           
