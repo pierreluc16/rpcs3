@@ -9,7 +9,8 @@ on:
 
 jobs:
   build:
-    name: 🏗️ Verify Environment on Resolute Raccoon
+    # Changed from Resolute Raccoon to a cleaner title format
+    name: 🏗️ Verify Environment on Ubuntu 26.04
     runs-on: ubuntu-26.04
 
     steps:
@@ -37,7 +38,7 @@ jobs:
           DEV_MISSING=$((DEV_MISSING + 1))
         fi
         
-        # Method 2: uconv (Updated layout to match Method 1)
+        # Method 2: uconv
         if command -v uconv &> /dev/null; then
           UCONV_VER=$(uconv -? 2>&1 | grep -oE "version [0-9.]+" | awk '{print $2}')
           
