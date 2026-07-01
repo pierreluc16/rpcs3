@@ -25,21 +25,24 @@ jobs:
         DEV_MISSING=0
         DETECTED_VERSION=""
         
-        # Method 1: pkg-config (Clarifies if development headers exist)
+        # Method 1: pkg-config (Updated advanced verification)
         if pkg-config --exists icu-i18n; then
           DETECTED_VERSION=$(pkg-config --modversion icu-i18n 2>/dev/null)
-          echo "✅ [Method 1] Checking via pkg-config... Found! (Version: $DETECTED_VERSION)"
+          ICU_CFLAGS=$(pkg-config --cflags icu-i18n 2>/dev/null)
+          
+          echo "✅ [Method 1] Checking via pkg-config... Found!"
+          echo "  - Package name: icu-i18n"
+          echo "  - Detected version: $DETECTED_VERSION"
+          echo "  - Include paths: ${ICU_CFLAGS:-none (default system paths)}"
         else
-          echo "❌ [Method 1] Checking via pkg-config... Failed! (libicu-dev is missing)"
+          echo "❌ [Method 1] Checking via pkg-config... Failed! (libicu-dev config file missing)"
           DEV_MISSING=$((DEV_MISSING + 1))
         fi
         
-        # Method 2: uconv (Updated detection logic)
+        # Method 2: uconv
         if command -v uconv &> /dev/null; then
-          # Extract version safely; uconv often outputs its version details to stderr via '-?'
           UCONV_VER=$(uconv -? 2>&1 | grep -oE "version [0-9.]+" | awk '{print $2}')
           
-          # Fallback extraction pattern if 'version' keyword differs
           if [ -z "$UCONV_VER" ]; then
             UCONV_VER=$(uconv --version 2>&1 | grep -oE "[0-9.]+" | head -n 1)
           fi
@@ -53,7 +56,7 @@ jobs:
           DEV_MISSING=$((DEV_MISSING + 1))
         fi
         
-        # Method 3: dpkg database scan (Determining package manager status)
+        # Method 3: dpkg database scan
         echo "🔍 [Method 3] Checking via dpkg database..."
         if dpkg -l | grep -q libicu; then
           echo "✅ libicu components exist inside package manager database."
