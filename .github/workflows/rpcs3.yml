@@ -1,19 +1,11 @@
-name: Check Requirements
+name: Windows 11 ARM Launcher Check
 
-on:
-  push:
-  pull_request:
-  workflow_dispatch: # Allows manual triggering from the Actions tab
+on: [push, pull_request, workflow_dispatch]
 
 jobs:
-  verify-dependencies:
-    runs-on: ubuntu-26.04
+  check-inventory:
+    runs-on: windows-11-arm
 
     steps:
-      - name: Check if libicu-dev is installed
-        run: |
-          if ! dpkg -s libicu-dev >/dev/null 2>&1; then
-            echo "Error: libicu-dev is missing!"
-            exit 1
-          fi
-          echo "libicu-dev is installed."
+      - name: List Launcher Inventory
+        run: py -0p
