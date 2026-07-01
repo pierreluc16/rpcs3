@@ -5,7 +5,6 @@ on:
     branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
-  # Enables manual execution from the GitHub Actions interface
   workflow_dispatch:
 
 jobs:
@@ -23,11 +22,15 @@ jobs:
         echo "🚀 STARTING ICU DEPENDENCY CHECK"
         echo "========================================="
         
+        # Track failures using a status counter
+        FAILED_CHECKS=0
+        
         # Method 1: pkg-config
         if pkg-config --exists icu-i18n; then
           echo "✅ [Method 1] Checking via pkg-config... Found!"
         else
           echo "❌ [Method 1] Checking via pkg-config... Failed!"
+          FAILED_CHECKS=$((FAILED_CHECKS + 1))
         fi
         
         # Method 2: uconv
@@ -35,6 +38,7 @@ jobs:
           echo "✅ [Method 2] Checking via uconv utility... Found!"
         else
           echo "❌ [Method 2] Checking via uconv utility... Failed!"
+          FAILED_CHECKS=$((FAILED_CHECKS + 1))
         fi
         
         # Method 3: dpkg (Ensures libicu78 components are listed)
@@ -43,6 +47,7 @@ jobs:
           dpkg -l | grep libicu | awk '{print "  - " $2 " (Version: " $3 ")"}'
         else
           echo "❌ [Method 3] Checking via dpkg database... Not found."
+          FAILED_CHECKS=$((FAILED_CHECKS + 1))
         fi
         
         # Method 4: Scan x86_64-linux-gnu system directory
@@ -50,5 +55,14 @@ jobs:
         find /usr/lib -name "libicuuc.so*" 2>/dev/null | sed 's/^/  - /'
         
         echo "========================================="
-        echo "🎉 Final Result: ICU CHECK COMPLETE!"
+        
+        # Auto-Detect and display the Final Result based on the status counter
+        if [ $FAILED_CHECKS -eq 0 ]; then
+          echo "🎉 Final Result: ICU IS FULLY INSTALLED AND CONFIGURABLE!"
+        else
+          echo "⚠️ Final Result: ICU CHECK FAILED! Missing headers or development tools."
+          # Optional: Uncomment the next line to force the GitHub Actions job to fail
+          # exit 1
+        fi
+        
         echo "========================================="
