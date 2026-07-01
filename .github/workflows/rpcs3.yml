@@ -28,12 +28,10 @@ jobs:
         # Method 1: pkg-config (Updated advanced verification)
         if pkg-config --exists icu-i18n; then
           DETECTED_VERSION=$(pkg-config --modversion icu-i18n 2>/dev/null)
-          ICU_CFLAGS=$(pkg-config --cflags icu-i18n 2>/dev/null)
           
           echo "✅ [Method 1] Checking via pkg-config... Found!"
           echo "  - Package name: icu-i18n"
           echo "  - Detected version: $DETECTED_VERSION"
-          echo "  - Include paths: ${ICU_CFLAGS:-none (default system paths)}"
         else
           echo "❌ [Method 1] Checking via pkg-config... Failed! (libicu-dev config file missing)"
           DEV_MISSING=$((DEV_MISSING + 1))
