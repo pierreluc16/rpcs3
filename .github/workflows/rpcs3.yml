@@ -1,105 +1,11 @@
-name: ⚙️ ICU Dependency Check (Ubuntu 26.04)
+name: Windows 11 ARM Launcher Check
 
-on:
-  push:
-    branches: [ main, master ]
-  pull_request:
-    branches: [ main, master ]
-  workflow_dispatch:
+on: [push, pull_request, workflow_dispatch]
 
 jobs:
-  build:
-    # Changed from Resolute Raccoon to a cleaner title format
-    name: 🏗️ Verify Environment on Ubuntu 26.04
-    runs-on: ubuntu-26.04
+  check-inventory:
+    runs-on: windows-11-vs2026-arm
 
     steps:
-    - name: 📂 Checkout repository
-      uses: actions/checkout@v4
-
-    - name: 🔍 Run ICU Dependency Check
-      run: |
-        echo "========================================="
-        echo "🚀 STARTING ICU DEPENDENCY CHECK"
-        echo "========================================="
-        
-        DEV_MISSING=0
-        DETECTED_VERSION=""
-        
-        # Method 1: pkg-config
-        if pkg-config --exists icu-i18n; then
-          DETECTED_VERSION=$(pkg-config --modversion icu-i18n 2>/dev/null)
-          
-          echo "✅ [Method 1] Checking via pkg-config... Found!"
-          echo "  - Package name: icu-i18n"
-          echo "  - Detected version: $DETECTED_VERSION"
-        else
-          echo "❌ [Method 1] Checking via pkg-config... Failed! (libicu-dev config file missing)"
-          DEV_MISSING=$((DEV_MISSING + 1))
-        fi
-        
-        # Method 2: uconv
-        if command -v uconv &> /dev/null; then
-          UCONV_VER=$(uconv -? 2>&1 | grep -oE "version [0-9.]+" | awk '{print $2}')
-          
-          if [ -z "$UCONV_VER" ]; then
-            UCONV_VER=$(uconv --version 2>&1 | grep -oE "[0-9.]+" | head -n 1)
-          fi
-          
-          echo "✅ [Method 2] Checking via uconv utility... Found!"
-          echo "  - Command utility: uconv"
-          echo "  - Detected version: $UCONV_VER"
-          
-          if [ -z "$DETECTED_VERSION" ] && [ ! -z "$UCONV_VER" ]; then
-            DETECTED_VERSION=$UCONV_VER
-          fi
-        else
-          echo "❌ [Method 2] Checking via uconv utility... Failed! (Command not found)"
-          DEV_MISSING=$((DEV_MISSING + 1))
-        fi
-        
-        # Method 3: dpkg database scan
-        echo "🔍 [Method 3] Checking via dpkg database..."
-        if dpkg -l | grep -q libicu; then
-          echo "✅ libicu components exist inside package manager database."
-          dpkg -l | grep libicu | awk '{print "  - " $2 " (Version: " $3 ")"}'
-          
-          if [ -z "$DETECTED_VERSION" ]; then
-            DETECTED_VERSION=$(dpkg -l | grep -E "libicu[0-9]+" | head -n 1 | awk '{print $3}' | cut -d'-' -f1)
-          fi
-        else
-          echo "❌ No libicu packages found in dpkg database."
-        fi
-        
-        # Method 4: Scan system directories for raw binary layout (.so files)
-        echo "🔍 [Method 4] Direct system scanning for library files..."
-        SO_FILES=$(find /usr/lib -name "libicuuc.so.[0-9]*" 2>/dev/null)
-        if [ ! -z "$SO_FILES" ]; then
-          echo "✅ Active .so files discovered in the system folder."
-          echo "$SO_FILES" | sed 's/^/  - /'
-          
-          if [ -z "$DETECTED_VERSION" ]; then
-            DETECTED_VERSION=$(echo "$SO_FILES" | head -n 1 | grep -oE "so\.[0-9]+" | cut -d'.' -f2)
-          fi
-        else
-          echo "❌ No active .so library files found."
-        fi
-        
-        echo "========================================="
-        
-        # Final output categorization
-        if [ ! -z "$DETECTED_VERSION" ]; then
-          echo "📦 DETECTED ICU VERSION: $DETECTED_VERSION"
-          
-          if [ $DEV_MISSING -eq 0 ]; then
-            echo "🎉 Final Result: ICU IS FULLY INSTALLED AND CONFIGURABLE!"
-          else
-            echo "🎉 Final Result: ICU IS INSTALLED on this runner container."
-            echo "⚠️  (Note: System runtime is present, but development headers are missing)."
-          fi
-        else
-          echo "❌ Final Result: ICU IS NOT INSTALLED on this system."
-          exit 1
-        fi
-        
-        echo "========================================="
+      - name: List Launcher Inventory
+        run: py -0p
