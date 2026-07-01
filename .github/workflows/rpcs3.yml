@@ -5,11 +5,12 @@ on:
     branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
+  # Enables manual execution from the GitHub Actions interface
+  workflow_dispatch:
 
 jobs:
   build:
     name: 🏗️ Verify Environment on Resolute Raccoon
-    # Targets the Ubuntu 26.04 image environment
     runs-on: ubuntu-26.04
 
     steps:
@@ -49,5 +50,5 @@ jobs:
         find /usr/lib -name "libicuuc.so*" 2>/dev/null | sed 's/^/  - /'
         
         echo "========================================="
-        echo "🎉 Final Result: ICU IS FULLY INSTALLED AND CONFIGURABLE!"
+        echo "🎉 Final Result: ICU CHECK COMPLETE!"
         echo "========================================="
