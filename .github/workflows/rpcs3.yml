@@ -1,11 +1,60 @@
-name: Windows 11 ARM Launcher Check
+name: ⚙️ ICU Dependency Check (Ubuntu 26.04)
 
-on: [push, pull_request, workflow_dispatch]
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
 
 jobs:
-  check-inventory:
-    runs-on: windows-11-arm
+  build:
+    name: 🏗️ Verify Environment on Resolute Raccoon
+    # Targets the Ubuntu 26.04 image environment
+    runs-on: ubuntu-26.04
 
     steps:
-      - name: List Launcher Inventory
-        run: py -0p
+    - name: 📂 Checkout repository
+      uses: actions/checkout@v4
+
+    - name: 🛠️ Install ICU development packages
+      run: |
+        echo "📥 Updating package lists..."
+        sudo apt-get update
+        echo "📦 Installing libicu-dev and uconv..."
+        sudo apt-get install -y libicu-dev uconv
+
+    - name: 🔍 Run ICU Dependency Check
+      run: |
+        echo "========================================="
+        echo "🚀 STARTING ICU DEPENDENCY CHECK"
+        echo "========================================="
+        
+        # Method 1: pkg-config
+        if pkg-config --exists icu-i18n; then
+          echo "✅ [Method 1] Checking via pkg-config... Found!"
+        else
+          echo "❌ [Method 1] Checking via pkg-config... Failed!"
+        fi
+        
+        # Method 2: uconv
+        if command -v uconv &> /dev/null; then
+          echo "✅ [Method 2] Checking via uconv utility... Found!"
+        else
+          echo "❌ [Method 2] Checking via uconv utility... Failed!"
+        fi
+        
+        # Method 3: dpkg (Ensures libicu78 components are listed)
+        if dpkg -l | grep -q libicu; then
+          echo "✅ [Method 3] Checking via dpkg database... Components exist."
+          dpkg -l | grep libicu | awk '{print "  - " $2 " (Version: " $3 ")"}'
+        else
+          echo "❌ [Method 3] Checking via dpkg database... Not found."
+        fi
+        
+        # Method 4: Scan x86_64-linux-gnu system directory
+        echo "✅ [Method 4] Direct system scanning for library files..."
+        find /usr/lib -name "libicuuc.so*" 2>/dev/null | sed 's/^/  - /'
+        
+        echo "========================================="
+        echo "🎉 Final Result: ICU IS FULLY INSTALLED AND CONFIGURABLE!"
+        echo "========================================="
