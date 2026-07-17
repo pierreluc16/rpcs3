@@ -1,4 +1,4 @@
-name: Verify Legacy Container Config Rejection (Host Native Brew)
+name: Verify Legacy Container Config Rejection (Exact Version Lock)
 
 on:
   push:
@@ -15,8 +15,8 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # Installs the upstream 2026 binaries cleanly directly to the native host layer
-      - name: Install Upstream Container Toolchain via Linuxbrew
+      # Activates Homebrew path mappings on the host runner to provision Podman/Skopeo
+      - name: Install Upstream Podman and Skopeo via Linuxbrew
         run: |
           echo "=== Activating Host-Native Linuxbrew Configuration ==="
           eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
@@ -24,21 +24,22 @@ jobs:
           echo "=== Updating Package Matrices ==="
           brew update
           
-          echo "=== Installing Target Engine Releases ==="
-          # Resolves exact binary packages directly onto the host runtime environment
+          echo "=== Installing Engine Releases ==="
           brew install podman skopeo
-          
-          # To ensure Buildah matches without compile halts, pull the accompanying Linux runtime suite
-          sudo apt-get update && sudo apt-get install -y buildah
           
           echo "=== Verified Active Native Tool Versions ==="
           podman --version
-          buildah --version
           skopeo --version
+
+      # Pulls Buildah v1.44.0 directly from Quay to avoid local host compilation or network repo limitations
+      - name: Stage Isolated Buildah v1.44.0 Architecture Layer
+        run: |
+          echo "=== Fetching Official Upstream Buildah v1.44.0 Runtime Layer ==="
+          docker pull quay.io/containers/buildah:v1.44.0
 
       - name: Run v1 Format Rejection Tests
         run: |
-          # Reinject the native host binary path mapping context for this step block execution environment
+          # Reinject the native host binary path mapping context for Homebrew tools
           eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
 
           # 1. Create an isolated temporary configuration directory on the host filesystem
@@ -55,12 +56,16 @@ jobs:
           # Initialize validation tracking variable
           TEST_FAILED=0
           
-          echo -e "\n=== 2. Testing BUILDAH ==="
-          if error_msg=$(buildah images 2>&1); then
-              echo "❌ FAILURE: Buildah accepted the legacy v1 format!"
+          echo -e "\n=== 2. Testing BUILDAH v1.44.0 ==="
+          # Execute the exact Buildah v1.44.0 binary by passing our test directory mapping via volume mounts
+          if error_msg=$(docker run --rm \
+            -v "$TEST_DIR:$TEST_DIR" \
+            -e CONTAINERS_REGISTRIES_CONF="$CONTAINERS_REGISTRIES_CONF" \
+            quay.io/containers/buildah:v1.44.0 buildah images 2>&1); then
+              echo "❌ FAILURE: Buildah v1.44.0 accepted the legacy v1 format!"
               TEST_FAILED=1
           else
-              echo "✅ SUCCESS: Buildah successfully rejected the v1 format."
+              echo "✅ SUCCESS: Buildah v1.44.0 successfully rejected the v1 format."
               echo "Captured Error: $error_msg"
           fi
           
@@ -90,6 +95,6 @@ jobs:
               echo -e "\n❌ CRITICAL PIPELINE ERROR: A tool accepted the legacy configuration."
               exit 1
           else
-              echo -e "\n🎉 ALL TESTS PASSED: Legacy v1 formats strictly blocked by the container engine stack."
+              echo -e "\n🎉 ALL TESTS PASSED: Legacy v1 formats strictly blocked across all required target versions."
               exit 0
           fi
