@@ -5,36 +5,20 @@ on:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
-  workflow_dispatch: # Manual launch button
+  workflow_dispatch: # Enables manual triggering from the GitHub UI
 
 jobs:
   podman-build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Update Podman to Latest Upstream
+      - name: Verify Podman installation
         run: |
-          echo "=== Checking native runner Podman version ==="
-          podman --version || true
-          
-          echo "=== Adding repository for the latest Podman packages ==="
-          sudo mkdir -p /etc/apt/keyrings
-          
-          # Pulling the latest tools from the openSUSE Kubic development repository
-          curl -fsSL "https://opensuse.org" \
-            | sudo gpg --dearmor -o /etc/apt/keyrings/libcontainers-archive-keyring.gpg
-            
-          echo "deb [signed-by=/etc/apt/keyrings/libcontainers-archive-keyring.gpg] https://opensuse.org /" \
-            | sudo tee /etc/apt/sources.list.d/devel-kubic-libcontainers-unstable.list
-            
-          sudo apt-get update
-          sudo apt-get install -y podman conmon crun runc netavark aardvark-dns
-          
-          echo "=== Upgraded Podman version ==="
           podman --version
+          podman info
 
       - name: Create Containerfile
         run: |
@@ -47,7 +31,7 @@ jobs:
               ca-certificates \
               && rm -rf /var/lib/apt/lists/*
               
-          CMD ["echo", "Hello from Ubuntu 26.04 inside modern Podman!"]
+          CMD ["echo", "Hello from Ubuntu 26.04 inside Podman!"]
           EOF
 
       - name: Build image with Podman
