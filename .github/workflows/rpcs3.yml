@@ -31,7 +31,6 @@ jobs:
             git golang-go make libseccomp-dev libgpgme-dev \
             libassuan-dev libbtrfs-dev libdevmapper-dev pkg-config \
             uidmap fuse-overlayfs iptables
-
       # Clones and compiles the exact v6.0.1 code securely
       - name: Compile Podman 6.0.1 Source on Cache Miss
         if: steps.cache-podman.outputs.cache-hit != 'true'
@@ -45,7 +44,6 @@ jobs:
           
           mkdir -p /home/runner/podman-bin
           cp bin/podman /home/runner/podman-bin/podman
-
       - name: Inject Podman 6.0.1 and Configure System
         run: |
           # Moves the compiled 6.0.1 binary into the native /usr/bin system execution path
@@ -53,7 +51,6 @@ jobs:
           sudo chmod +x /usr/bin/podman
           
           sudo apt-get update && sudo apt-get install -y uidmap fuse-overlayfs iptables
-
       - name: Configure Rootless User Namespaces
         run: |
           echo "=== Configuring Kernel Security for Rootless Execution ==="
@@ -62,7 +59,6 @@ jobs:
           # Create user-space container directories
           mkdir -p /home/runner/.local/share/containers/storage
           mkdir -p /home/runner/.config/containers
-
           # Force Podman to use rootless storage paths by default instead of /var/lib/containers
           cat <<EOF > /home/runner/.config/containers/storage.conf
           [storage]
@@ -71,24 +67,10 @@ jobs:
           [storage.options.overlay]
           mount_program = "/usr/bin/fuse-overlayfs"
           EOF
-
-      - name: Upgrade Registries Config to V2 Format
-        run: |
-          echo "=== Overwriting Legacy Host Configuration for Podman 6.x compatibility ==="
-          sudo mkdir -p /etc/containers
-          sudo tee /etc/containers/registries.conf <<EOF
-          unqualified-search-registries = ["docker.io", "quay.io"]
-
-          [[registry]]
-          credential-helper = ""
-          location = "docker.io"
-          EOF
-
       - name: Verify Exact Installed Version
         run: |
           podman --version
           podman info || true
-
       - name: Create Containerfile
         run: |
           cat <<EOF > Containerfile
@@ -102,11 +84,9 @@ jobs:
               
           CMD ["echo", "Hello from Ubuntu 26.04 inside verified Podman 6.0.1!"]
           EOF
-
       - name: Build image with Podman 6.0.1
         run: |
           podman build -t my-ubuntu-app:26.04 -f Containerfile .
-
       - name: Test the built image
         run: |
           podman run --rm my-ubuntu-app:26.04
