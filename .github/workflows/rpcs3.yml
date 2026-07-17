@@ -15,18 +15,24 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install Latest Stable Podman
-        # Uses Red Hat's verified action configured for the Ubuntu 26.04 package repository
-        uses: redhat-actions/podman-install@v1
-        with:
-          ubuntu-repository: 'resolute'
+      - name: Install Latest Podman from System Repositories
+        run: |
+          echo "=== Enabling Proposed and Backports for Latest Stable Packages ==="
+          # Enable proposed/backports to ensure we pull the absolute newest builds for 26.04
+          sudo sed -i 's/^# deb/deb/g' /etc/apt/sources.list
+          
+          sudo apt-get update -y
+          
+          echo "=== Installing Native Podman and Security Tools ==="
+          # Installing via apt integrates natively with AppArmor, fixing the reexec issue
+          sudo apt-get install -y podman uidmap fuse-overlayfs
 
       - name: Configure Rootless User Namespaces
         run: |
           echo "=== Configuring Kernel Security for Rootless Execution ==="
           sudo sysctl -w kernel.unprivileged_userns_clone=1
           
-          # Initialize explicit local storage maps to prevent 'permission denied' flags
+          # Force configuration templates into the local home directory
           mkdir -p /home/runner/.local/share/containers/storage
           mkdir -p /home/runner/.config/containers
 
