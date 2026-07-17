@@ -15,41 +15,45 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Download and Install Static Podman 6.0.1 Binaries
+      - name: Install System Networking Dependencies
         run: |
-          echo "=== Downloading Podman 6.0.1 Static Asset ==="
-          # Fetches the official pre-compiled static archive directly from upstream
-          curl -fsSL -O https://github.com
+          sudo apt-get update
+          # Standard isolation sidecars needed by the static core
+          sudo apt-get install -y uidmap fuse-overlayfs iptables
+
+      - name: Download and Install Static Podman 6.0.1 Server Engine
+        run: |
+          echo "=== Fetching Verified Stable Podman 6.0.1 Engine ==="
+          curl -fsSL -o podman-linux-amd64.tar.gz https://github.com
           
-          echo "=== Extracting and Moving Executable ==="
-          tar -xzf podman-remote-static-linux_amd64.tar.gz
+          echo "=== Extracting and Overlaying Binaries ==="
+          tar -xzf podman-linux-amd64.tar.gz
           
-          # Rename and overlay directly onto system binary paths so it runs natively 
-          sudo mv bin/podman-remote-static-linux_amd64 /usr/bin/podman
-          sudo chmod +x /usr/bin/podman
+          # Move full static binaries and asset trees securely into the primary system path
+          sudo cp -r podman-linux-amd64/usr/* /usr/
+          sudo cp -r podman-linux-amd64/etc/* /etc/
           
-          echo "=== Cleaning up workspace ==="
-          rm -rf bin podman-remote-static-linux_amd64.tar.gz
+          echo "=== Cleaning Up Installer Assets ==="
+          rm -rf podman-linux-amd64 podman-linux-amd64.tar.gz
 
       - name: Configure Rootless User Namespaces
         run: |
           echo "=== Configuring Kernel Security for Rootless Execution ==="
-          # Overrides default Ubuntu VM limits to allow unprivileged execution
           sudo sysctl -w kernel.unprivileged_userns_clone=1
           
-          # Initialize underlying workspace folders for non-root runner tasks
+          # Map execution spaces natively to the local virtual workspace runner user
           mkdir -p /home/runner/.local/share/containers/storage
           mkdir -p /home/runner/.config/containers
 
-      - name: Verify Target Podman Version
+      - name: Verify Upgraded Podman Engine Version
         run: |
           podman --version
-          podman info || true
+          podman info
 
       - name: Create Containerfile
         run: |
           cat <<EOF > Containerfile
-          # Strict fully-qualified registry target naming required on Ubuntu 26.04
+          # Fully qualified name registry matching enforcement is required on Ubuntu 26.04
           FROM docker.io/library/ubuntu:26.04
           
           RUN apt-get update && apt-get install -y \
@@ -57,7 +61,7 @@ jobs:
               ca-certificates \
               && rm -rf /var/lib/apt/lists/*
               
-          CMD ["echo", "Hello from Ubuntu 26.04 inside working Podman 6.0.1!"]
+          CMD ["echo", "Hello from Ubuntu 26.04 inside working Podman 6.0.1 Server Engine!"]
           EOF
 
       - name: Build image with Podman 6.0.1
