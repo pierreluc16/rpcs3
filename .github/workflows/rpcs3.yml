@@ -15,34 +15,24 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Upgrade Podman to Latest Upstream Version (APT Native)
+      - name: Install Native System Podman
         run: |
-          echo "=== Adding openSUSE Kubic Repository ==="
-          sudo mkdir -p /etc/apt/keyrings
-          
-          # Téléchargement de la clé de signature du dépôt
-          curl -fsSL "https://opensuse.org" \
-            | sudo gpg --dearmor -o /etc/apt/keyrings/libcontainers-archive-keyring.gpg
-            
-          # Ajout du dépôt de paquets officiels d'avant-garde
-          echo "deb [signed-by=/etc/apt/keyrings/libcontainers-archive-keyring.gpg] https://opensuse.org /" \
-            | sudo tee /etc/apt/sources.list.d/devel-kubic-libcontainers-unstable.list
-            
+          echo "=== Updating package indexes ==="
           sudo apt-get update -y
           
-          echo "=== Installing Latest Podman and Stack tools ==="
-          # L'installation via APT configure automatiquement les permissions de réexécution (reexec) du noyau
+          echo "=== Installing Native Podman Stack ==="
+          # Les paquets officiels gèrent automatiquement les politiques d'isolation d'Ubuntu
           sudo apt-get install -y podman uidmap fuse-overlayfs
-
+          
       - name: Configure Rootless User Namespaces
         run: |
           echo "=== Activating unprivileged user namespaces ==="
-          # Permet au runner d'exécuter des conteneurs isolés sans être administrateur (root)
+          # Permet au runner d'instancier des conteneurs isolés en mode rootless
           sudo sysctl -w kernel.unprivileged_userns_clone=1
           
-          # Vérification de la configuration uidmap par défaut du runner
-          cat /etc/subuid || true
-          cat /etc/subgid || true
+          # Force la configuration de stockage par défaut dans le répertoire home de l'utilisateur
+          mkdir -p /home/runner/.local/share/containers/storage
+          mkdir -p /home/runner/.config/containers
 
       - name: Verify Podman installation
         run: |
@@ -52,6 +42,7 @@ jobs:
       - name: Create Containerfile
         run: |
           cat <<EOF > Containerfile
+          # Le nom de registre complet (strict) reste obligatoire sur Ubuntu 26.04
           FROM docker.io/library/ubuntu:26.04
           
           RUN apt-get update && apt-get install -y \
@@ -59,7 +50,7 @@ jobs:
               ca-certificates \
               && rm -rf /var/lib/apt/lists/*
               
-          CMD ["echo", "Hello from Ubuntu 26.04 inside working Podman!"]
+          CMD ["echo", "Hello from Ubuntu 26.04 inside working native Podman!"]
           EOF
 
       - name: Build image with Podman
