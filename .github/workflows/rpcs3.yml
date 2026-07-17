@@ -72,6 +72,16 @@ jobs:
           mount_program = "/usr/bin/fuse-overlayfs"
           EOF
 
+          # Overwrite the system registries.conf with the required v2 format for Podman 6.x
+          sudo mkdir -p /etc/containers
+          sudo tee /etc/containers/registries.conf <<EOF
+          unqualified-search-registries = ["docker.io", "quay.io"]
+
+          [[registry]]
+          credential-helper = ""
+          location = "docker.io"
+          EOF
+
       - name: Verify Exact Installed Version
         run: |
           podman --version
