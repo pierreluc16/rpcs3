@@ -1,4 +1,4 @@
-name: Build and Test Ubuntu 26.04 Image with Podman
+name: Build and Test Ubuntu 26.04 Image with Latest Podman 6
 
 on:
   push:
@@ -15,26 +15,57 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install Native System Podman
+      - name: Install Build Dependencies
         run: |
-          echo "=== Updating package indexes ==="
-          sudo apt-get update -y
-          
-          echo "=== Installing Native Podman Stack ==="
-          # Les paquets officiels gèrent automatiquement les politiques d'isolation d'Ubuntu
-          sudo apt-get install -y podman uidmap fuse-overlayfs
-          
-      - name: Configure Rootless User Namespaces
+          sudo apt-get update
+          sudo apt-get install -y \
+            btrfs-progs \
+            git \
+            golang-go \
+            go-md2man \
+            iptables \
+            libassuan-dev \
+            libbtrfs-dev \
+            libc6-dev \
+            libdevmapper-dev \
+            libglib2.0-dev \
+            libgpgme-dev \
+            libgpg-error-dev \
+            libprotobuf-dev \
+            libprotobuf-c-dev \
+            libseccomp-dev \
+            libselinux1-dev \
+            libsystemd-dev \
+            make \
+            pkg-config \
+            uidmap \
+            fuse-overlayfs
+
+      - name: Download and Compile Podman 6.0.1
         run: |
-          echo "=== Activating unprivileged user namespaces ==="
-          # Permet au runner d'instancier des conteneurs isolés en mode rootless
+          echo "=== Cloning Podman v6.0.1 ==="
+          git clone --depth 1 --branch v6.0.1 https://github.com src/github.com/containers/podman
+          cd src/github.com/containers/podman
+          
+          echo "=== Building and Installing Podman ==="
+          # Compiling natively automatically resolves "failed to reexec" permissions
+          make BUILDTAGS="seccomp systemd"
+          sudo make install PREFIX=/usr
+          
+          echo "=== Installing Default Container Configurations ==="
+          # Required for rootless storage definitions and default registries
+          sudo make install.config PREFIX=/usr
+
+      - name: Configure Rootless Execution Namespaces
+        run: |
+          echo "=== Overriding kernel constraints ==="
           sudo sysctl -w kernel.unprivileged_userns_clone=1
           
-          # Force la configuration de stockage par défaut dans le répertoire home de l'utilisateur
+          # Initialize default storage directory templates for the non-root runner user
           mkdir -p /home/runner/.local/share/containers/storage
           mkdir -p /home/runner/.config/containers
 
-      - name: Verify Podman installation
+      - name: Verify Upgraded Podman Installation
         run: |
           podman --version
           podman info
@@ -42,7 +73,7 @@ jobs:
       - name: Create Containerfile
         run: |
           cat <<EOF > Containerfile
-          # Le nom de registre complet (strict) reste obligatoire sur Ubuntu 26.04
+          # Fully qualified name registry matching enforcement
           FROM docker.io/library/ubuntu:26.04
           
           RUN apt-get update && apt-get install -y \
@@ -50,10 +81,10 @@ jobs:
               ca-certificates \
               && rm -rf /var/lib/apt/lists/*
               
-          CMD ["echo", "Hello from Ubuntu 26.04 inside working native Podman!"]
+          CMD ["echo", "Hello from Ubuntu 26.04 inside working Podman 6.0.1!"]
           EOF
 
-      - name: Build image with Podman
+      - name: Build image with Podman 6
         run: |
           podman build -t my-ubuntu-app:26.04 -f Containerfile .
 
