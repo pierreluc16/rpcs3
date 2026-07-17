@@ -15,21 +15,12 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # Installs latest Podman (v5.x / v6.x) via Red Hat actions or dynamic builds
-      - name: Install Latest Podman
-        uses: redhat-actions/podman-install@v1
-
-      # Force-pulls the latest upstream binary for Skopeo to bypass old Apt packages
-      - name: Install Latest Skopeo
-        uses: alefirenko/setup-skopeo@v1
-        with:
-          version: 'latest'
-
-      # Pulls latest Buildah tool stack
-      - name: Install Latest Buildah
+      # Homebrew on Linux provides the latest compiled versions of the container toolchain
+      - name: Install Latest Podman, Buildah, and Skopeo via Homebrew
         run: |
-          sudo apt-get update
-          sudo apt-get install -y buildah
+          echo "=== Installing Latest Container Toolchain ==="
+          brew update
+          brew install podman buildah skopeo
           
           echo "=== Verified Active Tool Versions ==="
           podman --version
