@@ -15,17 +15,16 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # Activating Homebrew environment on Linux via its explicit location path
-      - name: Install Latest Podman, Buildah, and Skopeo via Homebrew
+      # Source from modern package branches to obtain the latest versions 
+      - name: Install Latest Podman, Buildah, and Skopeo
         run: |
-          echo "=== Activating and Updating Homebrew ==="
-          eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+          echo "=== Adding Upstream Package Repositories ==="
+          sudo sh -c 'echo "deb http://archive.ubuntu.com/ubuntu plucky main universe" > /etc/apt/sources.list.d/plucky.list'
           
-          echo "=== Installing Latest Upstream Container Toolchain ==="
-          brew update
-          brew install podman buildah skopeo
+          echo "=== Updating Repositories and Upgrading Tooling ==="
+          sudo apt-get update
+          sudo apt-get install -y podman buildah skopeo conmon crun runc
           
-          # Pass paths down dynamically to subsequent tools if needed, or check outputs
           echo "=== Verified Active Tool Versions ==="
           podman --version
           buildah --version
@@ -33,9 +32,6 @@ jobs:
 
       - name: Run v1 Format Rejection Tests
         run: |
-          # Re-evaluate Homebrew setup for this step block execution environment
-          eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
-
           # 1. Create an isolated configuration directory
           TEST_DIR=$(mktemp -d -t container-cfg-XXXXXX)
           export CONTAINERS_REGISTRIES_CONF="$TEST_DIR/registries.conf"
