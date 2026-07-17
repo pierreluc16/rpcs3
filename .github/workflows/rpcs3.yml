@@ -15,16 +15,18 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install Latest Podman
-        # Uses the official Red Hat Action to safely bootstrap Podman on the runner
+      - name: Install Latest Stable Podman
+        # Uses Red Hat's verified action configured for the Ubuntu 26.04 package repository
         uses: redhat-actions/podman-install@v1
+        with:
+          ubuntu-repository: 'resolute'
 
       - name: Configure Rootless User Namespaces
         run: |
           echo "=== Configuring Kernel Security for Rootless Execution ==="
           sudo sysctl -w kernel.unprivileged_userns_clone=1
           
-          # Initialize clean user storage maps for the non-root runner user
+          # Initialize explicit local storage maps to prevent 'permission denied' flags
           mkdir -p /home/runner/.local/share/containers/storage
           mkdir -p /home/runner/.config/containers
 
