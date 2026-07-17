@@ -1,4 +1,4 @@
-name: Build and Test Ubuntu 26.04 Image with Latest Podman 6
+name: Build and Test Ubuntu 26.04 Image with Latest Podman
 
 on:
   push:
@@ -15,57 +15,20 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install Build Dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            btrfs-progs \
-            git \
-            golang-go \
-            go-md2man \
-            iptables \
-            libassuan-dev \
-            libbtrfs-dev \
-            libc6-dev \
-            libdevmapper-dev \
-            libglib2.0-dev \
-            libgpgme-dev \
-            libgpg-error-dev \
-            libprotobuf-dev \
-            libprotobuf-c-dev \
-            libseccomp-dev \
-            libselinux1-dev \
-            libsystemd-dev \
-            make \
-            pkg-config \
-            uidmap \
-            fuse-overlayfs
+      - name: Install Latest Stable Podman
+        # Uses the official action to instantly fetch and deploy the newest Podman version
+        uses: containers/podman-installer-action@v1
 
-      - name: Download and Compile Podman 6.0.1
+      - name: Configure Rootless User Namespaces
         run: |
-          echo "=== Cloning Podman v6.0.1 ==="
-          git clone --depth 1 --branch v6.0.1 https://github.com src/github.com/containers/podman
-          cd src/github.com/containers/podman
-          
-          echo "=== Building and Installing Podman ==="
-          # Compiling natively automatically resolves "failed to reexec" permissions
-          make BUILDTAGS="seccomp systemd"
-          sudo make install PREFIX=/usr
-          
-          echo "=== Installing Default Container Configurations ==="
-          # Required for rootless storage definitions and default registries
-          sudo make install.config PREFIX=/usr
-
-      - name: Configure Rootless Execution Namespaces
-        run: |
-          echo "=== Overriding kernel constraints ==="
+          echo "=== Configuring Kernel Security for Rootless Execution ==="
           sudo sysctl -w kernel.unprivileged_userns_clone=1
           
-          # Initialize default storage directory templates for the non-root runner user
+          # Initialize clean user storage maps for the non-root runner user
           mkdir -p /home/runner/.local/share/containers/storage
           mkdir -p /home/runner/.config/containers
 
-      - name: Verify Upgraded Podman Installation
+      - name: Verify Podman installation
         run: |
           podman --version
           podman info
@@ -73,7 +36,7 @@ jobs:
       - name: Create Containerfile
         run: |
           cat <<EOF > Containerfile
-          # Fully qualified name registry matching enforcement
+          # Fully qualified name registry matching enforcement is required on Ubuntu 26.04
           FROM docker.io/library/ubuntu:26.04
           
           RUN apt-get update && apt-get install -y \
@@ -81,10 +44,10 @@ jobs:
               ca-certificates \
               && rm -rf /var/lib/apt/lists/*
               
-          CMD ["echo", "Hello from Ubuntu 26.04 inside working Podman 6.0.1!"]
+          CMD ["echo", "Hello from Ubuntu 26.04 inside working latest Podman!"]
           EOF
 
-      - name: Build image with Podman 6
+      - name: Build image with Podman
         run: |
           podman build -t my-ubuntu-app:26.04 -f Containerfile .
 
