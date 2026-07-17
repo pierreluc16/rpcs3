@@ -15,46 +15,63 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install Podman Core Dependencies
+      - name: Cache Podman 6.0.1 Binary
+        id: cache-podman
+        uses: actions/cache@v4
+        with:
+          path: /home/runner/podman-bin/podman
+          key: podman-6.0.1-ubuntu2604
+
+      - name: Install Build Dependencies (Only if cache misses)
+        if: steps.cache-podman.outputs.cache-hit != 'true'
         run: |
           sudo apt-get update
-          # Mandatory Linux network and runtime mapping engines
-          sudo apt-get install -y uidmap fuse-overlayfs iptables
+          sudo apt-get install -y \
+            git golang-go make libseccomp-dev libgpgme-dev \
+            libassuan-dev libbtrfs-dev libdevmapper-dev pkg-config \
+            uidmap fuse-overlayfs iptables
 
-      - name: Fetch and Deploy Explicit Podman 6.0.1 Binary
+      - name: Clone and Compile Podman 6.0.1 (Only if cache misses)
+        if: steps.cache-podman.outputs.cache-hit != 'true'
         run: |
-          echo "=== Pulling Official Release Archive ==="
-          # Directly downloads the exact v6.0.1 remote release asset from the source project
-          curl -fsSL https://github.com -o podman.tar.gz
+          echo "=== Cloning official source tag v6.0.1 ==="
+          git clone --depth 1 --branch v6.0.1 https://github.com src/podman-src
+          cd src/podman-src
           
-          echo "=== Extracting Client Binaries ==="
-          tar -xzf podman.tar.gz
+          echo "=== Compiling native stable binary ==="
+          make BUILDTAGS="seccomp" podman
           
-          echo "=== Deploying Executable onto Host System Path ==="
-          # Moves and transforms the binary cleanly into the primary path to satisfy AppArmor constraints
-          sudo mv bin/podman-remote-static-linux_amd64 /usr/bin/podman
+          echo "=== Saving compiled binary to cache workspace ==="
+          mkdir -p /home/runner/podman-bin
+          cp bin/podman /home/runner/podman-bin/podman
+
+      - name: Deploy Podman 6.0.1 to System Path
+        run: |
+          echo "=== Injecting Podman 6.0.1 into system binary folder ==="
+          sudo cp /home/runner/podman-bin/podman /usr/bin/podman
           sudo chmod +x /usr/bin/podman
           
-          echo "=== Cleaning Up Environment ==="
-          rm -rf bin podman.tar.gz
+          echo "=== Installing runtime mapping helpers ==="
+          sudo apt-get update && sudo apt-get install -y uidmap fuse-overlayfs iptables
 
       - name: Configure Rootless User Namespaces
         run: |
-          echo "=== Configuring Kernel Security for Rootless Execution ==="
+          echo "=== Overriding system kernel restrictions ==="
           sudo sysctl -w kernel.unprivileged_userns_clone=1
           
-          # Initialize directory trees for unprivileged workflow tasks
+          # Initialisation des dossiers obligatoires pour éviter l'erreur de permissions 125
           mkdir -p /home/runner/.local/share/containers/storage
           mkdir -p /home/runner/.config/containers
 
-      - name: Verify Exact Version Target
+      - name: Verify Exact Version
         run: |
           podman --version
+          podman info || true
 
       - name: Create Containerfile
         run: |
           cat <<EOF > Containerfile
-          # Fully qualified name registry matching enforcement is required on Ubuntu 26.04
+          # Le nom de registre complet reste obligatoire sur Ubuntu 26.04
           FROM docker.io/library/ubuntu:26.04
           
           RUN apt-get update && apt-get install -y \
@@ -62,12 +79,12 @@ jobs:
               ca-certificates \
               && rm -rf /var/lib/apt/lists/*
               
-          CMD ["echo", "Hello from Ubuntu 26.04 inside working Podman 6.0.1!"]
+          CMD ["echo", "Hello from Ubuntu 26.04 inside working compilation-safe Podman 6.0.1!"]
           EOF
 
       - name: Build image with Podman 6.0.1
         run: |
-          podman build --add-host=host.docker.internal:127.0.0.1 -t my-ubuntu-app:26.04 -f Containerfile .
+          podman build -t my-ubuntu-app:26.04 -f Containerfile .
 
       - name: Test the built image
         run: |
