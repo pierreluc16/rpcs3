@@ -37,7 +37,7 @@ jobs:
         if: steps.cache-podman.outputs.cache-hit != 'true'
         run: |
           mkdir -p src
-          git clone --depth 1 --branch v6.0.1 https://github.com src/podman-repo
+          git clone --depth 1 --branch v6.0.1 https://github.com/containers/podman src/podman-repo
           cd src/podman-repo
           
           # Native compilation resolves any "failed to reexec" engine crashes
