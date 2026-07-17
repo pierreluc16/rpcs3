@@ -1,4 +1,4 @@
-name: Verify Legacy Container Config Rejection (Host Native)
+name: Verify Legacy Container Config Rejection (Host Native Brew)
 
 on:
   push:
@@ -15,18 +15,21 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # Forces the host runner to download the latest mid-2026 packages directly to its native filesystem
-      - name: Install Upstream Container Toolchain
+      # Installs the upstream 2026 binaries cleanly directly to the native host layer
+      - name: Install Upstream Container Toolchain via Linuxbrew
         run: |
-          echo "=== Injecting Upstream Package Source Definitions ==="
-          sudo sh -c 'echo "deb http://ubuntu.com plucky main universe" > /etc/apt/sources.list.d/plucky.list'
+          echo "=== Activating Host-Native Linuxbrew Configuration ==="
+          eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
           
-          echo "=== Resolving System Dependency Tree ==="
-          sudo apt-get update
+          echo "=== Updating Package Matrices ==="
+          brew update
           
-          echo "=== Installing Target 2026 Engine Releases ==="
-          # Explicitly targets the modern system libraries to drop v1 parsing support
-          sudo apt-get install -y --allow-downgrades podman buildah skopeo conmon crun runc
+          echo "=== Installing Target Engine Releases ==="
+          # Resolves exact binary packages directly onto the host runtime environment
+          brew install podman skopeo
+          
+          # To ensure Buildah matches without compile halts, pull the accompanying Linux runtime suite
+          sudo apt-get update && sudo apt-get install -y buildah
           
           echo "=== Verified Active Native Tool Versions ==="
           podman --version
@@ -35,13 +38,16 @@ jobs:
 
       - name: Run v1 Format Rejection Tests
         run: |
-          # 1. Create an isolated configuration directory on the host filesystem
+          # Reinject the native host binary path mapping context for this step block execution environment
+          eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+
+          # 1. Create an isolated temporary configuration directory on the host filesystem
           TEST_DIR=$(mktemp -d -t container-cfg-XXXXXX)
           export CONTAINERS_REGISTRIES_CONF="$TEST_DIR/registries.conf"
           
           echo "=== 1. Writing Legacy v1 Format to: $CONTAINERS_REGISTRIES_CONF ==="
           cat << 'EOF' > "$CONTAINERS_REGISTRIES_CONF"
-          # Legacy v1 flat format (Now explicitly unsupported)
+          # Legacy v1 flat format (Now strictly unsupported)
           [registries.search]
           registries = ['docker.io', 'quay.io']
           EOF
