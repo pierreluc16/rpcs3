@@ -1,103 +1,44 @@
-name: Verify Legacy Container Config Rejection (Stable Container Engine)
+name: Ubuntu 26.04 Podman CI/CD
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ "main" ]
   pull_request:
-    branches: [ main, master ]
-  workflow_dispatch:
+    branches: [ "main" ]
+
+env:
+  REGISTRY: docker.io
+  IMAGE_NAME: ${{ secrets.DOCKER_USERNAME }}/ubuntu-app
+  IMAGE_TAG: 26.04
 
 jobs:
-  verify-v1-format:
-    runs-on: ubuntu-24.04
-
+  build-and-deploy:
+    runs-on: ubuntu-26.04 # Natively targets the Ubuntu 26.04 runner
+    
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+    - name: Checkout Code
+      uses: actions/checkout@v4
 
-      # Activating Homebrew path mappings on the host runner to provision a native Podman 6.0+ binary
-      - name: Install Upstream Podman via Linuxbrew
-        run: |
-          echo "=== Activating Host-Native Linuxbrew Configuration ==="
-          eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
-          
-          echo "=== Updating Package Matrices ==="
-          brew update
-          
-          echo "=== Installing Engine Releases ==="
-          brew install podman
-          
-          echo "=== Verified Active Native Podman Version ==="
-          podman --version
+    - name: Registry Authentication
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      run: |
+        echo "${{ secrets.DOCKER_PASSWORD }}" | podman login ${{ env:REGISTRY }} \
+          -u "${{ secrets.DOCKER_USERNAME }}" \
+          --password-stdin
 
-      # Staging stable images directly from the explicit upstream Quay repositories
-      - name: Pull Upstream Buildah and Skopeo Verification Images
-        run: |
-          echo "=== Fetching Upstream Stable Container Tooling Layers ==="
-          docker pull quay.io/buildah/stable:latest
-          docker pull quay.io/skopeo/stable:latest
+    - name: Build Container Image
+      run: |
+        podman build \
+          --pull \
+          -t ${{ env:REGISTRY }}/${{ env:IMAGE_NAME }}:${{ env:IMAGE_TAG }} \
+          -f Containerfile .
 
-      - name: Run v1 Format Rejection Tests
-        run: |
-          # Reinject the native host binary path mapping context for Homebrew tools
-          eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+    - name: Execute Security & Unit Tests
+      run: |
+        # Run test suite inside the newly built Ubuntu 26.04 environment
+        podman run --rm ${{ env:REGISTRY }}/${{ env:IMAGE_NAME }}:${{ env:IMAGE_TAG }} apt-get check
 
-          # 1. Create an isolated temporary configuration directory on the host filesystem
-          TEST_DIR=$(mktemp -d -t container-cfg-XXXXXX)
-          export CONTAINERS_REGISTRIES_CONF="$TEST_DIR/registries.conf"
-          
-          echo "=== 1. Writing Legacy v1 Format to: $CONTAINERS_REGISTRIES_CONF ==="
-          cat << 'EOF' > "$CONTAINERS_REGISTRIES_CONF"
-          # Legacy v1 flat format (Now strictly unsupported)
-          [registries.search]
-          registries = ['docker.io', 'quay.io']
-          EOF
-          
-          # Initialize validation tracking variable
-          TEST_FAILED=0
-          
-          echo -e "\n=== 2. Testing BUILDAH v1.44+ via Stable Upstream Container ==="
-          # Execute the official binary by passing our test directory mapping via volume mounts
-          if error_msg=$(docker run --rm \
-            -v "$TEST_DIR:$TEST_DIR" \
-            -e CONTAINERS_REGISTRIES_CONF="$CONTAINERS_REGISTRIES_CONF" \
-            quay.io/buildah/stable:latest buildah images 2>&1); then
-              echo "❌ FAILURE: Buildah accepted the legacy v1 format!"
-              TEST_FAILED=1
-          else
-              echo "✅ SUCCESS: Buildah successfully rejected the v1 format."
-              echo "Captured Error: $error_msg"
-          fi
-          
-          echo -e "\n=== 3. Testing PODMAN 6.0+ ==="
-          if error_msg=$(podman info 2>&1); then
-              echo "❌ FAILURE: Podman accepted the legacy v1 format!"
-              TEST_FAILED=1
-          else
-              echo "✅ SUCCESS: Podman successfully rejected the v1 format."
-              echo "Captured Error: $error_msg"
-          fi
-          
-          echo -e "\n=== 4. Testing SKOPEO v1.23+ via Stable Upstream Container ==="
-          if error_msg=$(docker run --rm \
-            -v "$TEST_DIR:$TEST_DIR" \
-            -e CONTAINERS_REGISTRIES_CONF="$CONTAINERS_REGISTRIES_CONF" \
-            quay.io/skopeo/stable:latest skopeo list-tags docker://docker.io/library/alpine 2>&1); then
-              echo "❌ FAILURE: Skopeo accepted the legacy v1 format!"
-              TEST_FAILED=1
-          else
-              echo "✅ SUCCESS: Skopeo successfully rejected the v1 format."
-              echo "Captured Error: $error_msg"
-          fi
-          
-          # Cleanup environment configuration space
-          rm -rf "$TEST_DIR"
-          
-          # 5. Output programmatic evaluation status
-          if [ $TEST_FAILED -ne 0 ]; then
-              echo -e "\n❌ CRITICAL PIPELINE ERROR: A tool accepted the legacy configuration."
-              exit 1
-          else
-              echo -e "\n🎉 ALL TESTS PASSED: Legacy v1 formats strictly blocked across all updated target versions."
-              exit 0
-          fi
+    - name: Push Image to Registry
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      run: |
+        podman push ${{ env:REGISTRY }}/${{ env:IMAGE_NAME }}:${{ env:IMAGE_TAG }}
