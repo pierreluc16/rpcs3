@@ -15,36 +15,41 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install Runtime Security Tools
+      - name: Install Podman Core Dependencies
         run: |
           sudo apt-get update
-          # System isolation dependencies required to manage rootless operations
-          sudo apt-get install -y uidmap fuse-overlayfs iptables golang-go make libseccomp-dev
+          # Mandatory Linux network and runtime mapping engines
+          sudo apt-get install -y uidmap fuse-overlayfs iptables
 
-      - name: Compile and Inject Podman 6.0.1
+      - name: Fetch and Deploy Explicit Podman 6.0.1 Binary
         run: |
-          echo "=== Fetching and Compiling Podman 6.0.1 via Go ==="
-          # Compiling natively overrides path limits and matches your OS context
-          export GOPATH=$HOME/go
-          go install ://github.com
+          echo "=== Pulling Official Release Archive ==="
+          # Directly downloads the exact v6.0.1 remote release asset from the source project
+          curl -fsSL https://github.com -o podman.tar.gz
           
-          echo "=== Overlaying Executable onto System Path ==="
-          sudo cp $HOME/go/bin/podman /usr/bin/podman
+          echo "=== Extracting Client Binaries ==="
+          tar -xzf podman.tar.gz
+          
+          echo "=== Deploying Executable onto Host System Path ==="
+          # Moves and transforms the binary cleanly into the primary path to satisfy AppArmor constraints
+          sudo mv bin/podman-remote-static-linux_amd64 /usr/bin/podman
           sudo chmod +x /usr/bin/podman
+          
+          echo "=== Cleaning Up Environment ==="
+          rm -rf bin podman.tar.gz
 
       - name: Configure Rootless User Namespaces
         run: |
           echo "=== Configuring Kernel Security for Rootless Execution ==="
           sudo sysctl -w kernel.unprivileged_userns_clone=1
           
-          # Initialize directory trees for non-root workflow execution
+          # Initialize directory trees for unprivileged workflow tasks
           mkdir -p /home/runner/.local/share/containers/storage
           mkdir -p /home/runner/.config/containers
 
       - name: Verify Exact Version Target
         run: |
           podman --version
-          podman info || true
 
       - name: Create Containerfile
         run: |
@@ -62,7 +67,7 @@ jobs:
 
       - name: Build image with Podman 6.0.1
         run: |
-          podman build -t my-ubuntu-app:26.04 -f Containerfile .
+          podman build --add-host=host.docker.internal:127.0.0.1 -t my-ubuntu-app:26.04 -f Containerfile .
 
       - name: Test the built image
         run: |
