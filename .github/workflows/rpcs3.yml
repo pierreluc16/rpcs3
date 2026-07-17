@@ -1,4 +1,4 @@
-name: Verify Legacy Container Config Rejection
+name: Verify Legacy Container Config Rejection (Exact Versions)
 
 on:
   push:
@@ -15,20 +15,53 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # Source from modern package branches to obtain the latest versions 
-      - name: Install Latest Podman, Buildah, and Skopeo
+      - name: Setup Go Environment
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22' # Optimal Go compiler version for the mid-2026 container stack
+
+      - name: Install Compilation Dependencies
         run: |
-          echo "=== Adding Upstream Package Repositories ==="
-          sudo sh -c 'echo "deb http://archive.ubuntu.com/ubuntu plucky main universe" > /etc/apt/sources.list.d/plucky.list'
-          
-          echo "=== Updating Repositories and Upgrading Tooling ==="
           sudo apt-get update
-          sudo apt-get install -y podman buildah skopeo conmon crun runc
-          
-          echo "=== Verified Active Tool Versions ==="
-          podman --version
-          buildah --version
+          sudo apt-get install -y \
+            libgpgme-dev \
+            libassuan-dev \
+            libbtrfs-dev \
+            libdevmapper-dev \
+            libglib2.0-dev \
+            libostree-dev \
+            libseccomp-dev \
+            pkg-config \
+            make \
+            git \
+            go-md2man
+
+      - name: Compile and Install Skopeo v1.23.0
+        run: |
+          echo "=== Compiling Skopeo v1.23.0 ==="
+          git clone --depth 1 --branch v1.23.0 https://github.com src/skopeo
+          cd src/skopeo
+          make bin/skopeo
+          sudo cp bin/skopeo /usr/local/bin/skopeo
           skopeo --version
+
+      - name: Compile and Install Buildah v1.44.0
+        run: |
+          echo "=== Compiling Buildah v1.44.0 ==="
+          git clone --depth 1 --branch v1.44.0 https://github.com src/buildah
+          cd src/buildah
+          make buildah
+          sudo cp buildah /usr/local/bin/buildah
+          buildah --version
+
+      - name: Compile and Install Podman v6.0.0
+        run: |
+          echo "=== Compiling Podman v6.0.0 ==="
+          git clone --depth 1 --branch v6.0.0 https://github.com src/podman
+          cd src/podman
+          make podman
+          sudo cp bin/podman /usr/local/bin/podman
+          podman --version
 
       - name: Run v1 Format Rejection Tests
         run: |
