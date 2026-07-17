@@ -5,40 +5,51 @@ on:
     branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
-  workflow_dispatch: # Allows manual triggering from the UI
+  workflow_dispatch:
 
 jobs:
   verify-v1-format:
-    runs-on: ubuntu-26.04 # Standard runner with Podman/Buildah support
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Install Latest Podman, Buildah, and Skopeo
+      # Installs latest Podman (v5.x / v6.x) via Red Hat actions or dynamic builds
+      - name: Install Latest Podman
+        uses: redhat-actions/podman-install@v1
+
+      # Force-pulls the latest upstream binary for Skopeo to bypass old Apt packages
+      - name: Install Latest Skopeo
+        uses: alefirenko/setup-skopeo@v1
+        with:
+          version: 'latest'
+
+      # Pulls latest Buildah tool stack
+      - name: Install Latest Buildah
         run: |
           sudo apt-get update
-          sudo apt-get install -y podman buildah skopeo
+          sudo apt-get install -y buildah
           
-          echo "=== Installed Tool Versions ==="
+          echo "=== Verified Active Tool Versions ==="
           podman --version
           buildah --version
           skopeo --version
 
       - name: Run v1 Format Rejection Tests
         run: |
-          # 1. Create isolated configuration directory
+          # 1. Create an isolated configuration directory
           TEST_DIR=$(mktemp -d -t container-cfg-XXXXXX)
           export CONTAINERS_REGISTRIES_CONF="$TEST_DIR/registries.conf"
           
           echo "=== 1. Writing Legacy v1 Format to: $CONTAINERS_REGISTRIES_CONF ==="
           cat << 'EOF' > "$CONTAINERS_REGISTRIES_CONF"
-          # Legacy v1 flat format (Now unsupported)
+          # Legacy v1 flat format (Now explicitly unsupported)
           [registries.search]
           registries = ['docker.io', 'quay.io']
           EOF
           
-          # Initialize a tracking flag for failures
+          # Initialize validation tracking variable
           TEST_FAILED=0
           
           echo -e "\n=== 2. Testing BUILDAH ==="
@@ -68,14 +79,14 @@ jobs:
               echo "Captured Error: $error_msg"
           fi
           
-          # Clean up temporary file path
+          # Cleanup environment configuration space
           rm -rf "$TEST_DIR"
           
-          # 5. Handle step termination
+          # 5. Output programmatic evaluation status
           if [ $TEST_FAILED -ne 0 ]; then
-              echo -e "\n❌ CRITICAL ERROR: One or more tools failed to reject the deprecated v1 format."
+              echo -e "\n❌ CRITICAL PIPELINE ERROR: A tool accepted the legacy configuration."
               exit 1
           else
-              echo -e "\n🎉 ALL TESTS PASSED: Legacy v1 configurations safely rejected across the stack."
+              echo -e "\n🎉 ALL TESTS PASSED: Legacy v1 formats strictly blocked by the container engine stack."
               exit 0
           fi
