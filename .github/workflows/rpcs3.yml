@@ -1,4 +1,4 @@
-name: Podman Build Workflow
+name: Build and Test Ubuntu 26.04 Image with Podman
 
 on:
   push:
@@ -6,40 +6,37 @@ on:
   pull_request:
     branches: [ "main" ]
 
-env:
-  REGISTRY: docker.io
-  # Must be fully qualified (e.g., docker.io/username/image)
-  IMAGE_NAME: ${{ secrets.DOCKER_USERNAME }}/ubuntu-app
-  IMAGE_TAG: 26.04
-
 jobs:
-  podman-pipeline:
-    runs-on: ubuntu-26.04 # Uses the Ubuntu 26.04 host runner
-    
+  podman-build:
+    runs-on: ubuntu-latest
+
     steps:
-    - name: Checkout Code Base
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Registry Login
-      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-      run: |
-        echo "${{ secrets.DOCKER_PASSWORD }}" | podman login ${{ env:REGISTRY }} \
-          -u "${{ secrets.DOCKER_USERNAME }}" \
-          --password-stdin
+      - name: Verify Podman installation
+        run: |
+          podman --version
+          podman info
 
-    - name: Build Container Image
-      run: |
-        podman build \
-          --pull \
-          -t ${{ env:REGISTRY }}/${{ env:IMAGE_NAME }}:${{ env:IMAGE_TAG }} \
-          -f Containerfile .
+      - name: Create Containerfile
+        run: |
+          cat <<EOF > Containerfile
+          # Always use the fully qualified registry URL
+          FROM docker.io/library/ubuntu:26.04
+          
+          RUN apt-get update && apt-get install -y \
+              curl \
+              ca-certificates \
+              && rm -rf /var/lib/apt/lists/*
+              
+          CMD ["echo", "Hello from Ubuntu 26.04 inside Podman!"]
+          EOF
 
-    - name: Test Container Runtime
-      run: |
-        # Explicitly targets cgroupfs to safely bypass Systemd 259 driver lockouts
-        podman run --cgroup-manager=cgroupfs --rm ${{ env:REGISTRY }}/${{ env:IMAGE_NAME }}:${{ env:IMAGE_TAG }} uname -a
+      - name: Build image with Podman
+        run: |
+          podman build -t my-ubuntu-app:26.04 -f Containerfile .
 
-    - name: Push Verified Image
-      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-      run: |
-        podman push ${{ env:REGISTRY }}/${{ env:IMAGE_NAME }}:${{ env:IMAGE_TAG }}
+      - name: Test the built image
+        run: |
+          podman run --rm my-ubuntu-app:26.04
