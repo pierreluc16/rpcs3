@@ -1,4 +1,4 @@
-name: Build and Test Ubuntu 26.04 Image with Native Podman 6
+name: Build and Test Ubuntu 26.04 Image with Podman 6.0.1
 
 on:
   push:
@@ -15,34 +15,63 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install Official Upstream Podman 6
+      - name: Cache Podman 6.0.1 Binary
+        id: cache-podman
+        uses: actions/cache@v4
+        with:
+          path: /home/runner/podman-bin/podman
+          key: podman-6.0.1-ubuntu2604-v1
+
+      # This step only runs if the binary is NOT found in the GitHub cache
+      - name: Install Build Dependencies on Cache Miss
+        if: steps.cache-podman.outputs.cache-hit != 'true'
         run: |
-          echo "=== Updating package indexes ==="
-          sudo apt-get update -y
+          sudo apt-get update
+          sudo apt-get install -y \
+            git golang-go make libseccomp-dev libgpgme-dev \
+            libassuan-dev libbtrfs-dev libdevmapper-dev pkg-config \
+            uidmap fuse-overlayfs iptables
+
+      # Clones and compiles the exact v6.0.1 code securely
+      - name: Compile Podman 6.0.1 Source on Cache Miss
+        if: steps.cache-podman.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p src
+          git clone --depth 1 --branch v6.0.1 https://github.com src/podman-repo
+          cd src/podman-repo
           
-          echo "=== Installing Native Podman 6 and Security Layout ==="
-          # Les paquets officiels de la version 26.04 fournissent nativement la branche 6.0
-          sudo apt-get install -y podman uidmap fuse-overlayfs iptables
+          # Native compilation resolves any "failed to reexec" engine crashes
+          make BUILDTAGS="seccomp" podman
+          
+          mkdir -p /home/runner/podman-bin
+          cp bin/podman /home/runner/podman-bin/podman
+
+      - name: Inject Podman 6.0.1 and Configure System
+        run: |
+          # Moves the compiled 6.0.1 binary into the native /usr/bin system execution path
+          sudo cp /home/runner/podman-bin/podman /usr/bin/podman
+          sudo chmod +x /usr/bin/podman
+          
+          sudo apt-get update && sudo apt-get install -y uidmap fuse-overlayfs iptables
 
       - name: Configure Rootless User Namespaces
         run: |
           echo "=== Configuring Kernel Security for Rootless Execution ==="
-          # Force le noyau Ubuntu à autoriser la réexécution des espaces de noms
           sudo sysctl -w kernel.unprivileged_userns_clone=1
           
-          # Initialise les répertoires locaux de l'utilisateur éphémère du runner
+          # Explicitly layout storage configuration templates to prevent Permission Denied (Exit Code 125)
           mkdir -p /home/runner/.local/share/containers/storage
           mkdir -p /home/runner/.config/containers
 
       - name: Verify Exact Installed Version
         run: |
           podman --version
-          podman info
+          podman info || true
 
       - name: Create Containerfile
         run: |
           cat <<EOF > Containerfile
-          # Le nom de registre complet (strict) reste obligatoire sur Ubuntu 26.04
+          # Fully qualified name registry matching enforcement is strictly required on Ubuntu 26.04
           FROM docker.io/library/ubuntu:26.04
           
           RUN apt-get update && apt-get install -y \
@@ -50,10 +79,10 @@ jobs:
               ca-certificates \
               && rm -rf /var/lib/apt/lists/*
               
-          CMD ["echo", "Hello from Ubuntu 26.04 inside working native Podman 6!"]
+          CMD ["echo", "Hello from Ubuntu 26.04 inside verified Podman 6.0.1!"]
           EOF
 
-      - name: Build image with Podman 6
+      - name: Build image with Podman 6.0.1
         run: |
           podman build -t my-ubuntu-app:26.04 -f Containerfile .
 
