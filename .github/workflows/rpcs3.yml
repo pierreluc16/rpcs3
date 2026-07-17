@@ -9,7 +9,7 @@ on:
 
 jobs:
   verify-v1-format:
-    runs-on: ubuntu-24.04 # Standard runner with Podman/Buildah support
+    runs-on: ubuntu-26.04 # Standard runner with Podman/Buildah support
 
     steps:
       - name: Checkout Code
