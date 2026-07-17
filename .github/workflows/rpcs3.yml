@@ -5,7 +5,12 @@ on:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
-  workflow_dispatch: # Enables manual triggering from the GitHub UI
+  workflow_dispatch: # Permet le lancement manuel depuis l'interface GitHub
+
+# Définition des variables d'environnement au niveau global du Job pour corriger Podman 6
+env:
+  XDG_RUNTIME_DIR: /run/user/1001
+  CONTAINERS_STORAGE_CONF: ${{ github.workspace }}/storage.conf
 
 jobs:
   podman-build:
@@ -17,26 +22,37 @@ jobs:
 
       - name: Upgrade Podman to Latest Upstream Version
         run: |
-          echo "=== Preelevate default tool information ==="
-          podman --version || true
-          
           echo "=== Updating package indexes ==="
           sudo apt-get update -y
           
-          echo "=== Installing Homebrew to fetch newest upstream Podman ==="
-          # Homebrew provides the fastest path to cutting-edge Podman lines (e.g. 5.8 / 6.x+) on Ubuntu runners
+          echo "=== Installing Homebrew ==="
           NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://githubusercontent.com)"
           
-          echo "=== Evaluating Homebrew environment variables ==="
+          echo "=== Evaluating Homebrew environment ==="
           eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
           
           echo "=== Installing Podman via brew ==="
           brew install podman
           
-          # Inject brew's bin path dynamically into subsequent steps of the GitHub runner
+          # Injecte le binaire Homebrew au début du PATH pour écraser la version native d'Ubuntu
           echo "/home/linuxbrew/.linuxbrew/bin" >> $GITHUB_PATH
+
+      - name: Configure Rootless Storage Paths for Podman 6
+        run: |
+          echo "=== Creating user local storage directories ==="
+          mkdir -p mkdir -p /home/runner/.local/share/containers/storage
+          mkdir -p /home/runner/.config/containers
           
-          echo "=== Upgrade completed successfully ==="
+          echo "=== Generating local storage.conf to bypass system restrictions ==="
+          # Ce fichier force Podman à écrire dans le dossier Home du runner et non dans /var/lib
+          cat <<EOF > ${{ github.workspace }}/storage.conf
+          [storage]
+          driver = "overlay"
+          runroot = "/home/runner/.local/share/containers/storage/run"
+          graphroot = "/home/runner/.local/share/containers/storage"
+          [storage.options.overlay]
+          mount_program = "/usr/bin/fuse-overlayfs"
+          EOF
 
       - name: Verify Podman installation
         run: |
@@ -46,7 +62,7 @@ jobs:
       - name: Create Containerfile
         run: |
           cat <<EOF > Containerfile
-          # Always use the fully qualified registry URL
+          # Utilisation du nom de registre complet (Strict matching requis)
           FROM docker.io/library/ubuntu:26.04
           
           RUN apt-get update && apt-get install -y \
@@ -54,7 +70,7 @@ jobs:
               ca-certificates \
               && rm -rf /var/lib/apt/lists/*
               
-          CMD ["echo", "Hello from Ubuntu 26.04 inside Podman!"]
+          CMD ["echo", "Hello from Ubuntu 26.04 inside Podman 6.0!"]
           EOF
 
       - name: Build image with Podman
