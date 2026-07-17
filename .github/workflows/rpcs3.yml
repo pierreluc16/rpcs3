@@ -59,9 +59,18 @@ jobs:
           echo "=== Configuring Kernel Security for Rootless Execution ==="
           sudo sysctl -w kernel.unprivileged_userns_clone=1
           
-          # Explicitly layout storage configuration templates to prevent Permission Denied (Exit Code 125)
+          # Create user-space container directories
           mkdir -p /home/runner/.local/share/containers/storage
           mkdir -p /home/runner/.config/containers
+
+          # Force Podman to use rootless storage paths by default instead of /var/lib/containers
+          cat <<EOF > /home/runner/.config/containers/storage.conf
+          [storage]
+          driver = "overlay"
+          graphroot = "/home/runner/.local/share/containers/storage"
+          [storage.options.overlay]
+          mount_program = "/usr/bin/fuse-overlayfs"
+          EOF
 
       - name: Verify Exact Installed Version
         run: |
