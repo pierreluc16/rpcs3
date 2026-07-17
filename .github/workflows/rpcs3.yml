@@ -15,9 +15,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install Latest Stable Podman
-        # Uses the official action to instantly fetch and deploy the newest Podman version
-        uses: containers/podman-installer-action@v1
+      - name: Install Latest Podman
+        # Uses the official Red Hat Action to safely bootstrap Podman on the runner
+        uses: redhat-actions/podman-install@v1
 
       - name: Configure Rootless User Namespaces
         run: |
