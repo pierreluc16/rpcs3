@@ -5,12 +5,7 @@ on:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
-  workflow_dispatch: # Permet le lancement manuel depuis l'interface GitHub
-
-# Définition des variables d'environnement au niveau global du Job pour corriger Podman 6
-env:
-  XDG_RUNTIME_DIR: /run/user/1001
-  CONTAINERS_STORAGE_CONF: ${{ github.workspace }}/storage.conf
+  workflow_dispatch:
 
 jobs:
   podman-build:
@@ -20,39 +15,34 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Upgrade Podman to Latest Upstream Version
+      - name: Upgrade Podman to Latest Upstream Version (APT Native)
         run: |
-          echo "=== Updating package indexes ==="
+          echo "=== Adding openSUSE Kubic Repository ==="
+          sudo mkdir -p /etc/apt/keyrings
+          
+          # Téléchargement de la clé de signature du dépôt
+          curl -fsSL "https://opensuse.org" \
+            | sudo gpg --dearmor -o /etc/apt/keyrings/libcontainers-archive-keyring.gpg
+            
+          # Ajout du dépôt de paquets officiels d'avant-garde
+          echo "deb [signed-by=/etc/apt/keyrings/libcontainers-archive-keyring.gpg] https://opensuse.org /" \
+            | sudo tee /etc/apt/sources.list.d/devel-kubic-libcontainers-unstable.list
+            
           sudo apt-get update -y
           
-          echo "=== Installing Homebrew ==="
-          NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://githubusercontent.com)"
-          
-          echo "=== Evaluating Homebrew environment ==="
-          eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
-          
-          echo "=== Installing Podman via brew ==="
-          brew install podman
-          
-          # Injecte le binaire Homebrew au début du PATH pour écraser la version native d'Ubuntu
-          echo "/home/linuxbrew/.linuxbrew/bin" >> $GITHUB_PATH
+          echo "=== Installing Latest Podman and Stack tools ==="
+          # L'installation via APT configure automatiquement les permissions de réexécution (reexec) du noyau
+          sudo apt-get install -y podman uidmap fuse-overlayfs
 
-      - name: Configure Rootless Storage Paths for Podman 6
+      - name: Configure Rootless User Namespaces
         run: |
-          echo "=== Creating user local storage directories ==="
-          mkdir -p mkdir -p /home/runner/.local/share/containers/storage
-          mkdir -p /home/runner/.config/containers
+          echo "=== Activating unprivileged user namespaces ==="
+          # Permet au runner d'exécuter des conteneurs isolés sans être administrateur (root)
+          sudo sysctl -w kernel.unprivileged_userns_clone=1
           
-          echo "=== Generating local storage.conf to bypass system restrictions ==="
-          # Ce fichier force Podman à écrire dans le dossier Home du runner et non dans /var/lib
-          cat <<EOF > ${{ github.workspace }}/storage.conf
-          [storage]
-          driver = "overlay"
-          runroot = "/home/runner/.local/share/containers/storage/run"
-          graphroot = "/home/runner/.local/share/containers/storage"
-          [storage.options.overlay]
-          mount_program = "/usr/bin/fuse-overlayfs"
-          EOF
+          # Vérification de la configuration uidmap par défaut du runner
+          cat /etc/subuid || true
+          cat /etc/subgid || true
 
       - name: Verify Podman installation
         run: |
@@ -62,7 +52,6 @@ jobs:
       - name: Create Containerfile
         run: |
           cat <<EOF > Containerfile
-          # Utilisation du nom de registre complet (Strict matching requis)
           FROM docker.io/library/ubuntu:26.04
           
           RUN apt-get update && apt-get install -y \
@@ -70,7 +59,7 @@ jobs:
               ca-certificates \
               && rm -rf /var/lib/apt/lists/*
               
-          CMD ["echo", "Hello from Ubuntu 26.04 inside Podman 6.0!"]
+          CMD ["echo", "Hello from Ubuntu 26.04 inside working Podman!"]
           EOF
 
       - name: Build image with Podman
