@@ -14,29 +14,31 @@ jobs:
     - name: Checkout Source Code
       uses: actions/checkout@v4
 
-    - name: Install Podman 6.0.1 via Homebrew
+    - name: Pull and Install Static Podman 6.0.1 Binaries
       run: |
-        echo "=== Installing Engine via Brew ==="
-        # Homebrew is pre-configured on GitHub Actions Linux runners
-        brew install podman
+        echo "=== Installing Engine Dependencies ==="
+        sudo apt-get update
+        sudo apt-get install -y uidmap dbus-user-session conmon iptables catatonit
         
-        echo "=== Setting Up Execution Paths ==="
-        # Add Homebrew binaries to our current step PATH environment
-        echo "/home/linuxbrew/.linuxbrew/bin" >> $GITHUB_PATH
+        echo "=== Downloading Podman 6.0.1 Statically Linked Binary ==="
+        # Fetching the official compiled static assets directly from upstream containers release
+        curl -fsSL https://github.com/containers/podman/releases/download/v6.0.1/podman-remote-static-linux_amd64.tar.gz -o podman.tar.gz
+        tar -xzf podman.tar.gz
+        
+        # Move the true binary safely into execution spaces
+        sudo mv bin/podman-remote-static-linux_amd64 /usr/local/bin/podman
+        rm -rf bin podman.tar.gz
         
         echo "=== Configuring User Sub-UIDs for Rootless ==="
         sudo usermod --add-subuids 100000-165535 --add-subgids 100000-165535 $USER
-        
-    - name: Verify Upstream Version
+        podman system migrate
+
+    - name: Verify Version Block
       run: |
-        # Ensure our PATH picked up the Homebrew engine rather than stock apt
-        export PATH="/home/linuxbrew/.linuxbrew/bin:$PATH"
-        podman --version | grep "6.0.1" || (echo "Version check failed!" && podman --version && exit 1)
+        podman --version
 
     - name: Execute Pod Workflow
       run: |
-        export PATH="/home/linuxbrew/.linuxbrew/bin:$PATH"
-        
         echo "=== Building App ==="
         podman build -t local/app:v6 -f - . <<EOF
         FROM ubuntu:26.04
@@ -54,5 +56,4 @@ jobs:
 
     - name: Generate Production K8s Resource
       run: |
-        export PATH="/home/linuxbrew/.linuxbrew/bin:$PATH"
         podman kube generate active-pod > deployment-26.04.yaml
