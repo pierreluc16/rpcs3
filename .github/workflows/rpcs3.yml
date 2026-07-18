@@ -3,22 +3,8 @@ name: Podman 6.0.1 on Ubuntu 26.04 LTS
 on:
   push:
     branches: [ "main" ]
-  # --- ADDED FOR MANUAL LAUNCH ---
+  # --- SIMPLE MANUAL TRIGGER ---
   workflow_dispatch:
-    inputs:
-      environment:
-        description: 'Deployment Target Environment'
-        required: true
-        default: 'staging'
-        type: choice
-        options:
-          - staging
-          - production
-      debug_mode:
-        description: 'Enable verbose logging'
-        required: false
-        default: false
-        type: boolean
 
 jobs:
   podman-6-pipeline:
@@ -27,13 +13,6 @@ jobs:
     steps:
     - name: Checkout Source Code
       uses: actions/checkout@v4
-
-    - name: Log Manual Triggers
-      if: github.event_name == 'workflow_dispatch'
-      run: |
-        echo "🚀 Manual run initiated by: ${{ github.actor }}"
-        echo "🎯 Target Environment: ${{ github.event.inputs.environment }}"
-        echo "🔧 Debug Mode Status: ${{ github.event.inputs.debug_mode }}"
 
     - name: Bootstrap and Upgrade to Podman 6.0.1
       run: |
