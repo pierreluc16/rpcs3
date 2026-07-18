@@ -1,4 +1,4 @@
-name: Build and Test Ubuntu 26.04 Image with Podman 6.0.1
+name: Confirm Podman 6.0.1 Configuration Failure
 
 on:
   push:
@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  podman-build:
+  confirm-failure:
     runs-on: ubuntu-26.04
 
     steps:
@@ -22,7 +22,6 @@ jobs:
           path: /home/runner/podman-bin/podman
           key: podman-6.0.1-ubuntu2604-v1
 
-      # This step only runs if the binary is NOT found in the GitHub cache
       - name: Install Build Dependencies on Cache Miss
         if: steps.cache-podman.outputs.cache-hit != 'true'
         run: |
@@ -31,35 +30,34 @@ jobs:
             git golang-go make libseccomp-dev libgpgme-dev \
             libassuan-dev libbtrfs-dev libdevmapper-dev pkg-config \
             uidmap fuse-overlayfs iptables
-      # Clones and compiles the exact v6.0.1 code securely
+
       - name: Compile Podman 6.0.1 Source on Cache Miss
         if: steps.cache-podman.outputs.cache-hit != 'true'
         run: |
           mkdir -p src
           git clone --depth 1 --branch v6.0.1 https://github.com/containers/podman src/podman-repo
           cd src/podman-repo
-          
-          # Native compilation resolves any "failed to reexec" engine crashes
           make BUILDTAGS="seccomp" podman
-          
           mkdir -p /home/runner/podman-bin
           cp bin/podman /home/runner/podman-bin/podman
+
       - name: Inject Podman 6.0.1 and Configure System
         run: |
-          # Moves the compiled 6.0.1 binary into the native /usr/bin system execution path
           sudo cp /home/runner/podman-bin/podman /usr/bin/podman
           sudo chmod +x /usr/bin/podman
-          
           sudo apt-get update && sudo apt-get install -y uidmap fuse-overlayfs iptables
+
+      - name: Inspect Pre-baked Runner Configuration File
+        run: |
+          echo "=== Displaying the registries.conf dropped by install-container-tools.sh ==="
+          cat /etc/containers/registries.conf
+
       - name: Configure Rootless User Namespaces
         run: |
-          echo "=== Configuring Kernel Security for Rootless Execution ==="
           sudo sysctl -w kernel.unprivileged_userns_clone=1
-          
-          # Create user-space container directories
           mkdir -p /home/runner/.local/share/containers/storage
           mkdir -p /home/runner/.config/containers
-          # Force Podman to use rootless storage paths by default instead of /var/lib/containers
+          
           cat <<EOF > /home/runner/.config/containers/storage.conf
           [storage]
           driver = "overlay"
@@ -67,26 +65,9 @@ jobs:
           [storage.options.overlay]
           mount_program = "/usr/bin/fuse-overlayfs"
           EOF
-      - name: Verify Exact Installed Version
+
+      - name: Verify Version and Force Parse of Legacy Config
         run: |
           podman --version
-          podman info || true
-      - name: Create Containerfile
-        run: |
-          cat <<EOF > Containerfile
-          # Fully qualified name registry matching enforcement is strictly required on Ubuntu 26.04
-          FROM docker.io/library/ubuntu:26.04
-          
-          RUN apt-get update && apt-get install -y \
-              curl \
-              ca-certificates \
-              && rm -rf /var/lib/apt/lists/*
-              
-          CMD ["echo", "Hello from Ubuntu 26.04 inside verified Podman 6.0.1!"]
-          EOF
-      - name: Build image with Podman 6.0.1
-        run: |
-          podman build -t my-ubuntu-app:26.04 -f Containerfile .
-      - name: Test the built image
-        run: |
-          podman run --rm my-ubuntu-app:26.04
+          echo "=== Expecting initialization error below due to deprecated V1 schema ==="
+          podman info
