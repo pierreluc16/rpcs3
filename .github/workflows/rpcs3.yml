@@ -3,7 +3,7 @@ name: Build and Use Latest Podman, Buildah, & Skopeo (Ubuntu 26.04)
 on:
   push:
     branches: [ main ]
-  workflow_dispatch: # Allows manual pipeline triggering
+  workflow_dispatch: # Allows manual pipeline triggering from the GitHub Actions tab
 
 jobs:
   build-and-run:
@@ -13,7 +13,6 @@ jobs:
     - name: Checkout Repository
       uses: actions/checkout@v4
 
-    # Fix: swapped 'containers-common' for 'golang-github-containers-common'
     - name: Install Ubuntu 26.04 Build Dependencies
       run: |
         sudo apt-get update
@@ -86,14 +85,20 @@ jobs:
       continue-on-error: true
       run: |
         sudo buildah bud -t localhost/ubuntu26-test:latest .
+        IMAGE_ID=$(sudo buildah images -q localhost/ubuntu26-test:latest)
+        echo "BUILT_IMAGE_ID=$IMAGE_ID" >> $GITHUB_ENV
 
     - name: 'Test Pipeline: Run & Verify Image via Compiled Podman'
       continue-on-error: true
       run: |
         sudo podman images
-        sudo podman run --rm localhost/ubuntu26-test:latest --version
+        TARGET_IMAGE="${{ env.BUILT_IMAGE_ID }}"
+        [ -z "$TARGET_IMAGE" ] && TARGET_IMAGE="localhost/ubuntu26-test:latest"
+        sudo podman run --rm $TARGET_IMAGE --version
 
     - name: 'Test Pipeline: Extract & Inspect OCI Image via Compiled Skopeo'
       continue-on-error: true
       run: |
-        sudo skopeo copy containers-storage:localhost/ubuntu26-test:latest oci:compiled-oci-image:latest
+        TARGET_IMAGE="${{ env.BUILT_IMAGE_ID }}"
+        [ -z "$TARGET_IMAGE" ] && TARGET_IMAGE="localhost/ubuntu26-test:latest"
+        sudo skopeo copy containers-storage:$TARGET_IMAGE oci:compiled-oci-image:latest
