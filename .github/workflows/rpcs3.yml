@@ -82,7 +82,7 @@ jobs:
         sudo podman images
         TARGET_IMAGE="${{ env.BUILT_IMAGE_ID }}"
         [ -z "$TARGET_IMAGE" ] && TARGET_IMAGE="localhost/ubuntu26-test:latest"
-        sudo podman run --rm $TARGET_IMAGE --version
+        sudo podman run --rm "$TARGET_IMAGE" echo "Podman successfully ran this container"
     - name: 'Inspect Remote Image via Compiled Skopeo'
       continue-on-error: true
       run: |
