@@ -3,7 +3,7 @@ name: Podman 6.0.1 on Ubuntu 26.04 LTS
 on:
   push:
     branches: [ "main" ]
-  # --- SIMPLE MANUAL TRIGGER ---
+  # --- BLANK MANUAL LAUNCH BUTTON ---
   workflow_dispatch:
 
 jobs:
@@ -14,16 +14,30 @@ jobs:
     - name: Checkout Source Code
       uses: actions/checkout@v4
 
-    - name: Bootstrap and Upgrade to Podman 6.0.1
+    - name: Install Podman 6.0.1 via Homebrew
       run: |
-        sudo apt-get update
-        sudo apt-get install -y uidmap dbus-user-session build-essential podman netavark aardvark-dns
+        echo "=== Installing Engine via Brew ==="
+        # Homebrew is pre-configured on GitHub Actions Linux runners
+        brew install podman
+        
+        echo "=== Setting Up Execution Paths ==="
+        # Add Homebrew binaries to our current step PATH environment
+        echo "/home/linuxbrew/.linuxbrew/bin" >> $GITHUB_PATH
+        
+        echo "=== Configuring User Sub-UIDs for Rootless ==="
         sudo usermod --add-subuids 100000-165535 --add-subgids 100000-165535 $USER
-        podman system migrate
-        podman --version
+        
+    - name: Verify Upstream Version
+      run: |
+        # Ensure our PATH picked up the Homebrew engine rather than stock apt
+        export PATH="/home/linuxbrew/.linuxbrew/bin:$PATH"
+        podman --version | grep "6.0.1" || (echo "Version check failed!" && podman --version && exit 1)
 
     - name: Execute Pod Workflow
       run: |
+        export PATH="/home/linuxbrew/.linuxbrew/bin:$PATH"
+        
+        echo "=== Building App ==="
         podman build -t local/app:v6 -f - . <<EOF
         FROM ubuntu:26.04
         RUN apt-get update && apt-get install -y curl
@@ -31,6 +45,7 @@ jobs:
         CMD ["python3", "-m", "http.server", "80"]
         EOF
 
+        echo "=== Starting Netavark Mesh Pod ==="
         podman pod create --name active-pod -p 8080:80
         podman run -d --pod active-pod --name web-service local/app:v6
         
@@ -39,4 +54,5 @@ jobs:
 
     - name: Generate Production K8s Resource
       run: |
+        export PATH="/home/linuxbrew/.linuxbrew/bin:$PATH"
         podman kube generate active-pod > deployment-26.04.yaml
