@@ -53,7 +53,7 @@ jobs:
         git clone https://github.com/containers/buildah.git src/github.com/containers/buildah
         cd src/github.com/containers/buildah
         make buildah TAGS="seccomp"
-        sudo cp buildah /usr/local/bin/buildah
+        sudo cp bin/buildah /usr/local/bin/buildah
         buildah --version
 
     # --- COMPILE PODMAN ---
@@ -62,7 +62,7 @@ jobs:
         git clone https://github.com/containers/podman.git src/github.com/containers/podman
         cd src/github.com/containers/podman
         make podman TAGS="seccomp"
-        sudo cp podman /usr/local/bin/podman
+        sudo cp bin/podman /usr/local/bin/podman
         podman --version
 
     # --- PIPELINE INTEGRATION TEST ---
