@@ -1,99 +1,105 @@
-name: Official Podman 6.0.1 Source Compilation
-
-on:
-  push:
-    branches: [ "main" ]
+name: Build and Test Ubuntu 26.04 Image with Podman 6.0.1
+on:  
+  push:    
+    branches: [ "main" ]  
+  pull_request:    
+    branches: [ "main" ]  
   workflow_dispatch:
 
-env:
-  XDG_RUNTIME_DIR: /home/runner/.runtime
-  CONTAINER_ENGINE_ROOTLESS: "1"
-
 jobs:
-  build-and-run:
+  podman-build:
     runs-on: ubuntu-26.04
-
     steps:
-    - name: Checkout Source Code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Install Official Build and Runtime Dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          btrfs-progs \
-          git \
-          go-md2man \
-          iptables \
-          libassuan-dev \
-          libbtrfs-dev \
-          libc6-dev \
-          libdevmapper-dev \
-          libglib2.0-dev \
-          libgpgme-dev \
-          libgpg-error-dev \
-          libprotobuf-c-dev \
-          libprotobuf-dev \
-          libseccomp-dev \
-          libselinux1-dev \
-          libsystemd-dev \
-          pkg-config \
-          uidmap \
-          dbus-user-session \
-          libapparmor-dev \
-          containernetworking-plugins \
-          fuse-overlayfs
+      - name: Cache Podman 6.0.1 Binary
+        id: cache-podman
+        uses: actions/cache@v4
+        with:
+          path: /home/runner/podman-bin
+          key: podman-6.0.1-ubuntu2604-v2
 
-    - name: Setup Official Go Environment
-      uses: actions/setup-go@v5
-      with:
-        go-version: '1.22'
+      # This step only runs if the binary is NOT found in the GitHub cache
+      - name: Install Build Dependencies on Cache Miss
+        if: steps.cache-podman.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            git golang-go make libseccomp-dev libgpgme-dev \
+            libassuan-dev libbtrfs-dev libdevmapper-dev pkg-config \
+            uidmap fuse-overlayfs iptables btrfs-progs
 
-    - name: Clone and Compile Official Podman v6.0.1
-      run: |
-        git clone --depth 1 --branch v6.0.1 https://github.com/containers/podman.git
-        cd podman
-        make BUILDTAGS="seccomp apparmor" PREFIX=/usr
-        sudo make install PREFIX=/usr
+      # Clones and compiles the exact v6.0.1 code securely
+      - name: Compile Podman 6.0.1 Source on Cache Miss
+        if: steps.cache-podman.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p src
+          git clone --depth 1 --branch v6.0.1 https://github.com/containers/podman src/podman-repo
+          cd src/podman-repo
+          
+          # Native compilation with standard build tags
+          make BUILDTAGS="seccomp apparmor" podman
+          
+          mkdir -p /home/runner/podman-bin
+          cp bin/podman /home/runner/podman-bin/podman
 
-    - name: Download Upstream Default Container Configurations
-      run: |
-        sudo mkdir -p /etc/containers
-        sudo curl -L -o /etc/containers/registries.conf https://raw.githubusercontent.com/containers/image/main/registries.conf
-        sudo curl -L -o /etc/containers/policy.json https://raw.githubusercontent.com/containers/image/main/default-policy.json
+      - name: Inject Podman 6.0.1 and Configure System
+        run: |
+          # Install execution dependencies natively present on Ubuntu
+          sudo apt-get update && sudo apt-get install -y uidmap fuse-overlayfs iptables crun
+          
+          # Moves the compiled 6.0.1 binary into the native path
+          sudo cp /home/runner/podman-bin/podman /usr/bin/podman
+          sudo chmod +x /usr/bin/podman
 
-    - name: Configure Forceful Rootless Storage Path Maps
-      run: |
-        sudo usermod --add-subuids 100000-165535 --add-subgids 100000-165535 $USER
-        
-        mkdir -p "$XDG_RUNTIME_DIR"
-        chmod 700 "$XDG_RUNTIME_DIR"
-        mkdir -p ~/.config/containers
-        
-        cat <<EOF > ~/.config/containers/storage.conf
-        [storage]
-        driver = "overlay"
-        runroot = "/home/runner/.runtime/containers"
-        graphroot = "/home/runner/.local/share/containers/storage"
-        
-        [storage.options.overlay]
-        mount_program = "/usr/bin/fuse-overlayfs"
-        EOF
-        
-        podman system migrate
+      - name: Configure Rootless User Namespaces & Storage
+        run: |
+          echo "=== Configuring Kernel Security for Rootless Execution ==="
+          sudo sysctl -w kernel.unprivileged_userns_clone=1
+          
+          # Ensure subuid/subgid are configured for the runner user
+          if ! grep -q "runner" /etc/subuid; then
+            echo "runner:100000:65536" | sudo tee -a /etc/subuid
+            echo "runner:100000:65536" | sudo tee -a /etc/subgid
+          fi
+          
+          # Create user-space container directories
+          mkdir -p /home/runner/.local/share/containers/storage
+          mkdir -p /home/runner/.config/containers
+          
+          # Force Podman to use rootless storage paths and use crun
+          cat <<EOF > /home/runner/.config/containers/storage.conf
+          [storage]
+          driver = "overlay"
+          graphroot = "/home/runner/.local/share/containers/storage"
+          [storage.options.overlay]
+          mount_program = "/usr/bin/fuse-overlayfs"
+          EOF
 
-    - name: Verify Upstream Release Version
-      run: |
-        podman --version
+      - name: Verify Exact Installed Version
+        run: |
+          podman --version
+          podman info
 
-    - name: Generate Containerfile
-      run: |
-        cat <<EOF > Containerfile
-        FROM ubuntu:26.04
-        RUN apt-get update && apt-get install -y curl && apt-get clean
-        CMD ["echo", "Hello from Podman 6.0.1 on Ubuntu 26.04"]
-        EOF
+      - name: Create Containerfile
+        run: |
+          cat <<EOF > Containerfile
+          # Fully qualified name bypasses the need for registries.conf
+          FROM docker.io/library/ubuntu:26.04
+          
+          RUN apt-get update && apt-get install -y \
+              curl \
+              ca-certificates \
+              && rm -rf /var/lib/apt/lists/*
+              
+          CMD ["echo", "Hello from Ubuntu 26.04 inside verified Podman 6.0.1!"]
+          EOF
 
-    - name: Build image with Podman 6.0.1
-      run: |
-        podman build -t my-ubuntu-app:26.04 -f Containerfile .
+      - name: Build image with Podman 6.0.1
+        run: |
+          podman build -t my-ubuntu-app:26.04 -f Containerfile .
+
+      - name: Test the built image
+        run: |
+          podman run --rm my-ubuntu-app:26.04
