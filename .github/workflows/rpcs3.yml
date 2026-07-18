@@ -104,11 +104,7 @@ jobs:
     - name: 'Check for v1 Format Error'
       if: always()
       run: |
-        ERROR_STRING="/etc/containers/registries.conf: registries.conf must be in v2 format but is in v1"
-        
-        if [ -f workflow_containers.log ] && grep -Fq "$ERROR_STRING" workflow_containers.log; then
-          echo "::error::V1 format error detected in the logs: $ERROR_STRING"
+        if [ -f workflow_containers.log ] && grep -Fq '"/etc/containers/registries.conf": registries.conf must be in v2 format but is in v1' workflow_containers.log; then
+          echo "::error::V1 format error detected!"
           exit 1
-        else
-          echo "No v1 format error detected in the logs."
         fi
