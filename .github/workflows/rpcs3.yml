@@ -1,80 +1,92 @@
-name: Build and Test Ubuntu 26.04 Image with Podman 6.0.1
-on:  
-  push:    
-    branches: [ "main" ]  
-  pull_request:    
-    branches: [ "main" ]  
-  workflow_dispatch:
+name: Build and Use Latest Podman, Buildah, & Skopeo (Ubuntu 26.04)
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch: # Allows manual pipeline triggering from the GitHub Actions tab
 
 jobs:
-  podman-build:
+  build-and-run:
     runs-on: ubuntu-26.04
+    
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+    - name: Checkout Repository
+      uses: actions/checkout@v4
 
-      - name: Install Build Dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            git golang-go make libseccomp-dev libgpgme-dev \
-            libassuan-dev libbtrfs-dev libdevmapper-dev pkg-config \
-            uidmap fuse-overlayfs iptables btrfs-progs crun
-      - name: Compile Podman 6.0.1 Source
-        run: |
-          mkdir -p src
-          git clone --depth 1 --branch v6.0.1 https://github.com/containers/podman src/podman-repo
-          cd src/podman-repo
-          
-          # Native compilation with standard build tags
-          make BUILDTAGS="seccomp apparmor" podman
-          
-          # Inject the compiled binary into the native path
-          sudo cp bin/podman /usr/bin/podman
-          sudo chmod +x /usr/bin/podman
-      - name: Configure Rootless User Namespaces & Storage
-        run: |
-          echo "=== Configuring Kernel Security for Rootless Execution ==="
-          sudo sysctl -w kernel.unprivileged_userns_clone=1
-          
-          # Ensure subuid/subgid are configured for the runner user
-          if ! grep -q "runner" /etc/subuid; then
-            echo "runner:100000:65536" | sudo tee -a /etc/subuid
-            echo "runner:100000:65536" | sudo tee -a /etc/subgid
-          fi
-          
-          # Create user-space container directories
-          mkdir -p /home/runner/.local/share/containers/storage
-          mkdir -p /home/runner/.config/containers
-          
-          # Force Podman to use rootless storage paths and use crun
-          cat <<EOF > /home/runner/.config/containers/storage.conf
-          [storage]
-          driver = "overlay"
-          graphroot = "/home/runner/.local/share/containers/storage"
-          [storage.options.overlay]
-          mount_program = "/usr/bin/fuse-overlayfs"
-          EOF
-      - name: Verify Exact Installed Version
-        run: |
-          podman --version
-          podman info
-      - name: Create Containerfile
-        run: |
-          cat <<EOF > Containerfile
-          # Fully qualified name bypasses the need for registries.conf
-          FROM docker.io/library/ubuntu:26.04
-          
-          RUN apt-get update && apt-get install -y \
-              curl \
-              ca-certificates \
-              && rm -rf /var/lib/apt/lists/*
-              
-          CMD ["echo", "Hello from Ubuntu 26.04 inside verified Podman 6.0.1!"]
-          EOF
-      - name: Build image with Podman 6.0.1
-        run: |
-          podman build -t my-ubuntu-app:26.04 -f Containerfile .
-      - name: Test the built image
-        run: |
-          podman run --rm my-ubuntu-app:26.04
+    - name: Install Ubuntu 26.04 Build Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          btrfs-progs \
+          git \
+          golang-go \
+          go-md2man \
+          libassuan-dev \
+          libbtrfs-dev \
+          libc6-dev \
+          libdevmapper-dev \
+          libglib2.0-dev \
+          libgpgme-dev \
+          libgpg-error-dev \
+          libprotobuf-dev \
+          libprotobuf-c-dev \
+          libseccomp-dev \
+          libselinux1-dev \
+          libsystemd-dev \
+          pkg-config \
+          make \
+          runc \
+          uidmap
+
+    # --- COMPILE SKOPEO ---
+    - name: Clone and Build Skopeo (Latest)
+      run: |
+        git clone https://github.com/containers/skopeo.git src/github.com/containers/skopeo
+        cd src/github.com/containers/skopeo
+        make bin/skopeo
+        sudo cp bin/skopeo /usr/local/bin/skopeo
+        skopeo --version
+
+    # --- COMPILE BUILDAH ---
+    - name: Clone and Build Buildah (Latest)
+      run: |
+        git clone https://github.com/containers/buildah.git src/github.com/containers/buildah
+        cd src/github.com/containers/buildah
+        make buildah TAGS="seccomp"
+        sudo cp buildah /usr/local/bin/buildah
+        buildah --version
+
+    # --- COMPILE PODMAN ---
+    - name: Clone and Build Podman (Latest)
+      run: |
+        git clone https://github.com/containers/podman.git src/github.com/containers/podman
+        cd src/github.com/containers/podman
+        make podman TAGS="seccomp"
+        sudo cp podman /usr/local/bin/podman
+        podman --version
+
+    # --- PIPELINE INTEGRATION TEST ---
+    - name: 'Test Pipeline: Create Containerfile'
+      run: |
+        cat <<EOF > Containerfile
+        FROM alpine:latest
+        RUN apk add --no-cache curl
+        ENTRYPOINT ["curl"]
+        EOF
+
+    - name: 'Test Pipeline: Build Image via Compiled Buildah'
+      run: |
+        sudo buildah bud -t localhost/ubuntu26-test:latest .
+
+    - name: 'Test Pipeline: Run & Verify Image via Compiled Podman'
+      run: |
+        sudo podman images
+        sudo podman run --rm localhost/ubuntu26-test:latest --version
+
+    - name: 'Test Pipeline: Extract & Inspect OCI Image via Compiled Skopeo'
+      run: |
+        # Use Skopeo to migrate the built image out of containers-storage into a raw OCI layout directory
+        sudo skopeo copy containers-storage:localhost/ubuntu26-test:latest oci:compiled-oci-image:latest
+        
+        # Parse and inspect the extracted OCI manifest using Skopeo
+        skopeo inspect oci:compiled-oci-image:latest
