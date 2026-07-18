@@ -1,4 +1,4 @@
-name: Build and Use Latest Podman, Buildah, & Skopeo (Ubuntu 26.04)
+name: Build and Use Latest Podman, Buildah and Skopeo (Ubuntu 26.04)
 
 on:
   push:
@@ -89,8 +89,8 @@ jobs:
         TARGET_IMAGE="${{ env.BUILT_IMAGE_ID }}"
         [ -z "$TARGET_IMAGE" ] && TARGET_IMAGE="localhost/ubuntu26-test:latest"
         sudo podman run --rm $TARGET_IMAGE --version
-    - name: 'Verify Remote Registry Manifest via Compiled Skopeo'
+    - name: 'Inspect Remote Image via Compiled Skopeo'
       continue-on-error: true
       run: |
-        echo "Testing Skopeo remote registry resolution..."
+        echo "Inspecting remote image manifest via compiled Skopeo..."
         sudo skopeo inspect docker://docker.io/library/alpine:latest | grep -i '"Architecture":'
