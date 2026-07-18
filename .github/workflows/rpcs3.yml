@@ -10,7 +10,8 @@ jobs:
   podman-build:
     runs-on: ubuntu-26.04
     steps:
-      
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Install Build Dependencies
         run: |
@@ -19,7 +20,6 @@ jobs:
             git golang-go make libseccomp-dev libgpgme-dev \
             libassuan-dev libbtrfs-dev libdevmapper-dev pkg-config \
             uidmap fuse-overlayfs iptables btrfs-progs crun
-
       - name: Compile Podman 6.0.1 Source
         run: |
           mkdir -p src
@@ -32,7 +32,6 @@ jobs:
           # Inject the compiled binary into the native path
           sudo cp bin/podman /usr/bin/podman
           sudo chmod +x /usr/bin/podman
-
       - name: Configure Rootless User Namespaces & Storage
         run: |
           echo "=== Configuring Kernel Security for Rootless Execution ==="
@@ -56,17 +55,10 @@ jobs:
           [storage.options.overlay]
           mount_program = "/usr/bin/fuse-overlayfs"
           EOF
-
-      - name: Clear Invalid Global Registries Configuration
-        run: |
-          # Clear out-of-date v1 system configurations causing Podman 6.0.1 engine crashes
-          sudo rm -f /etc/containers/registries.conf
-
       - name: Verify Exact Installed Version
         run: |
           podman --version
           podman info
-
       - name: Create Containerfile
         run: |
           cat <<EOF > Containerfile
@@ -80,11 +72,9 @@ jobs:
               
           CMD ["echo", "Hello from Ubuntu 26.04 inside verified Podman 6.0.1!"]
           EOF
-
       - name: Build image with Podman 6.0.1
         run: |
           podman build -t my-ubuntu-app:26.04 -f Containerfile .
-
       - name: Test the built image
         run: |
           podman run --rm my-ubuntu-app:26.04
