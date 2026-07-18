@@ -88,5 +88,5 @@ jobs:
     - name: 'Test Pipeline: Extract & Inspect OCI Image via Compiled Skopeo'
       continue-on-error: true
       run: |
-        # Explicitly pass the vfs storage transport details so Skopeo can successfully locate Buildah's output image
-        sudo skopeo copy containers-storage:[vfs@/var/lib/containers/storage+/run/containers/storage]localhost/ubuntu26-test:latest oci:compiled-oci-image:latest
+        # Auto-resolve the local driver context by omitting the brittle [vfs@...] override
+        sudo skopeo copy containers-storage:localhost/ubuntu26-test:latest oci:compiled-oci-image:latest
