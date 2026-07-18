@@ -111,6 +111,6 @@ jobs:
            (test -f skopeo.log && grep -E "$ERROR_STRING" skopeo.log); then
           
           echo "::error::[CRITICAL FAILURE] The v1 registries format error was detected."
-          echo "::error::This configuration error impacted the runtime behavior of Podman, Buildah, and Skopeo."
+          echo "::error::This configuration error impacted the runtime behavior of Podman,Buildah,and Skopeo."
           exit 1
         fi
