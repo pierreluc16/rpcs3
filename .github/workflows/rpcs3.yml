@@ -1,29 +1,12 @@
-name: Confirm Podman 6.0.1 Configuration Failure
-
+name: Test and Confirm Runner Configuration Failure
 on:
-  push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
   workflow_dispatch:
 
 jobs:
   confirm-failure:
     runs-on: ubuntu-26.04
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Cache Podman 6.0.1 Binary
-        id: cache-podman
-        uses: actions/cache@v4
-        with:
-          path: /home/runner/podman-bin/podman
-          key: podman-6.0.1-ubuntu2604-v1
-
-      - name: Install Build Dependencies on Cache Miss
-        if: steps.cache-podman.outputs.cache-hit != 'true'
+      - name: Install Build Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -31,43 +14,20 @@ jobs:
             libassuan-dev libbtrfs-dev libdevmapper-dev pkg-config \
             uidmap fuse-overlayfs iptables
 
-      - name: Compile Podman 6.0.1 Source on Cache Miss
-        if: steps.cache-podman.outputs.cache-hit != 'true'
+      - name: Compile Native Podman 6.0.1
         run: |
           mkdir -p src
           git clone --depth 1 --branch v6.0.1 https://github.com/containers/podman src/podman-repo
           cd src/podman-repo
           make BUILDTAGS="seccomp" podman
-          mkdir -p /home/runner/podman-bin
-          cp bin/podman /home/runner/podman-bin/podman
+          sudo cp bin/podman /usr/bin/podman
 
-      - name: Inject Podman 6.0.1 and Configure System
+      - name: Expose Runner Script Configuration Vulnerability
         run: |
-          sudo cp /home/runner/podman-bin/podman /usr/bin/podman
-          sudo chmod +x /usr/bin/podman
-          sudo apt-get update && sudo apt-get install -y uidmap fuse-overlayfs iptables
-
-      - name: Inspect Pre-baked Runner Configuration File
-        run: |
-          echo "=== Displaying the registries.conf dropped by install-container-tools.sh ==="
-          cat /etc/containers/registries.conf
-
-      - name: Configure Rootless User Namespaces
-        run: |
-          sudo sysctl -w kernel.unprivileged_userns_clone=1
-          mkdir -p /home/runner/.local/share/containers/storage
-          mkdir -p /home/runner/.config/containers
+          echo "=== Step 1: Confirm system-wide configs exist from install-container-tools.sh ==="
+          ls -la /etc/containers/
           
-          cat <<EOF > /home/runner/.config/containers/storage.conf
-          [storage]
-          driver = "overlay"
-          graphroot = "/home/runner/.local/share/containers/storage"
-          [storage.options.overlay]
-          mount_program = "/usr/bin/fuse-overlayfs"
-          EOF
-
-      - name: Verify Version and Force Parse of Legacy Config
-        run: |
-          podman --version
-          echo "=== Expecting initialization error below due to deprecated V1 schema ==="
+          echo "=== Step 2: Triggering Podman 6.0.1 Engine against Runner Files ==="
+          # This will read the runner's /etc/containers/ policy and registry files directly.
+          # It is expected to fail or throw critical parsing/signature errors due to the V1/V2 clash.
           podman info
