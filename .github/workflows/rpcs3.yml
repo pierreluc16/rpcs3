@@ -13,26 +13,15 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Cache Podman 6.0.1 Binary
-        id: cache-podman
-        uses: actions/cache@v4
-        with:
-          path: /home/runner/podman-bin
-          key: podman-6.0.1-ubuntu2604-v2
-
-      # This step only runs if the binary is NOT found in the GitHub cache
-      - name: Install Build Dependencies on Cache Miss
-        if: steps.cache-podman.outputs.cache-hit != 'true'
+      - name: Install Build Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
             git golang-go make libseccomp-dev libgpgme-dev \
             libassuan-dev libbtrfs-dev libdevmapper-dev pkg-config \
-            uidmap fuse-overlayfs iptables btrfs-progs
+            uidmap fuse-overlayfs iptables btrfs-progs crun
 
-      # Clones and compiles the exact v6.0.1 code securely
-      - name: Compile Podman 6.0.1 Source on Cache Miss
-        if: steps.cache-podman.outputs.cache-hit != 'true'
+      - name: Compile Podman 6.0.1 Source
         run: |
           mkdir -p src
           git clone --depth 1 --branch v6.0.1 https://github.com/containers/podman src/podman-repo
@@ -41,16 +30,8 @@ jobs:
           # Native compilation with standard build tags
           make BUILDTAGS="seccomp apparmor" podman
           
-          mkdir -p /home/runner/podman-bin
-          cp bin/podman /home/runner/podman-bin/podman
-
-      - name: Inject Podman 6.0.1 and Configure System
-        run: |
-          # Install execution dependencies natively present on Ubuntu
-          sudo apt-get update && sudo apt-get install -y uidmap fuse-overlayfs iptables crun
-          
-          # Moves the compiled 6.0.1 binary into the native path
-          sudo cp /home/runner/podman-bin/podman /usr/bin/podman
+          # Inject the compiled binary into the native path
+          sudo cp bin/podman /usr/bin/podman
           sudo chmod +x /usr/bin/podman
 
       - name: Configure Rootless User Namespaces & Storage
