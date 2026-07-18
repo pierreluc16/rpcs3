@@ -17,6 +17,7 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y \
+          containers-common \
           btrfs-progs \
           git \
           golang-go \
@@ -88,5 +89,4 @@ jobs:
     - name: 'Test Pipeline: Extract & Inspect OCI Image via Compiled Skopeo'
       continue-on-error: true
       run: |
-        # Auto-resolve the local driver context by omitting the brittle [vfs@...] override
         sudo skopeo copy containers-storage:localhost/ubuntu26-test:latest oci:compiled-oci-image:latest
