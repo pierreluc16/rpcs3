@@ -3,7 +3,6 @@ name: Official Podman 6.0.1 Source Compilation
 on:
   push:
     branches: [ "main" ]
-  # --- BLANK MANUAL LAUNCH BUTTON ---
   workflow_dispatch:
 
 jobs:
@@ -49,26 +48,27 @@ jobs:
       run: |
         git clone --depth 1 --branch v6.0.1 https://github.com/containers/podman.git
         cd podman
-        
-        # Build and install engine binaries globally
         make BUILDTAGS="seccomp apparmor" PREFIX=/usr
         sudo make install PREFIX=/usr
 
     - name: Download Upstream Default Container Configurations
       run: |
-        echo "=== Instantiating Default Policy and Registry Trees ==="
+        echo "=== Instantiating Default Configuration Trees ==="
         sudo mkdir -p /etc/containers
         
-        # Pulling the official default engine configurations directly from the upstream image organization
+        # Pulling official engine configurations and storage route helpers
         sudo curl -L -o /etc/containers/registries.conf https://raw.githubusercontent.com/containers/image/main/registries.conf
         sudo curl -L -o /etc/containers/policy.json https://raw.githubusercontent.com/containers/image/main/default-policy.json
+        sudo curl -L -o /etc/containers/storage.conf https://raw.githubusercontent.com/containers/storage/main/storage.conf
 
     - name: Configure Rootless Execution
       run: |
         sudo usermod --add-subuids 100000-165535 --add-subgids 100000-165535 $USER
         
-        # Initialize rootless environment data structures
-        mkdir -p ~/.config/containers
+        # Explicitly build rootless path footprints
+        mkdir -p ~/.config/containers ~/.local/share/containers/storage
+        
+        # Execute the migration inside user space
         podman system migrate
 
     - name: Verify Upstream Release Version
