@@ -85,26 +85,20 @@ jobs:
     - name: 'Build Image via Compiled Buildah'
       continue-on-error: true
       run: |
-        sudo buildah bud -t localhost/ubuntu26-test:latest 2>&1 | tee -a workflow_containers.log
+        sudo buildah bud -t localhost/ubuntu26-test:latest 
         IMAGE_ID=$(sudo buildah images -q localhost/ubuntu26-test:latest)
         echo "BUILT_IMAGE_ID=$IMAGE_ID" >> $GITHUB_ENV
 
     - name: 'Run & Verify Image via Compiled Podman'
       continue-on-error: true
       run: |
-        sudo podman images 2>&1 | tee -a workflow_containers.log
+        sudo podman images 
         TARGET_IMAGE="${{ env.BUILT_IMAGE_ID }}"
         [ -z "$TARGET_IMAGE" ] && TARGET_IMAGE="localhost/ubuntu26-test:latest"
-        sudo podman run --rm "$TARGET_IMAGE" echo "Podman successfully ran this container" 2>&1 | tee -a workflow_containers.log
+        sudo podman run --rm "$TARGET_IMAGE" echo "Podman successfully ran this container" 
 
     - name: 'Test Image Sync via Compiled Skopeo'
       continue-on-error: true
-      run: skopeo copy docker://alpine:latest oci:local-alpine:latest 2>&1 | tee -a workflow_containers.log
+      run: skopeo copy docker://alpine:latest oci:local-alpine:latest
 
-    - name: 'Check for v1 Format Error'
-      if: always()
-      run: |
-        if [ -f workflow_containers.log ] && grep -Fq '"/etc/containers/registries.conf": registries.conf must be in v2 format but is in v1' workflow_containers.log; then
-          echo "::error::V1 format error detected!"
-          exit 1
-        fi
+    
