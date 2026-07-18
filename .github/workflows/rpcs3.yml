@@ -3,7 +3,7 @@ name: Build and Use Latest Podman, Buildah, & Skopeo (Ubuntu 26.04)
 on:
   push:
     branches: [ main ]
-  workflow_dispatch: # Allows manual pipeline triggering from the GitHub Actions tab
+  workflow_dispatch: # Allows manual pipeline triggering
 
 jobs:
   build-and-run:
@@ -13,11 +13,12 @@ jobs:
     - name: Checkout Repository
       uses: actions/checkout@v4
 
+    # Fix: swapped 'containers-common' for 'golang-github-containers-common'
     - name: Install Ubuntu 26.04 Build Dependencies
       run: |
         sudo apt-get update
         sudo apt-get install -y \
-          containers-common \
+          golang-github-containers-common \
           btrfs-progs \
           git \
           golang-go \
@@ -40,28 +41,34 @@ jobs:
           uidmap
 
     # --- COMPILE SKOPEO ---
-    - name: Clone and Build Skopeo (Latest)
+    - name: Clone Skopeo (Latest)
+      run: git clone https://github.com/containers/skopeo.git skopeo
+
+    - name: Build and Install Skopeo
+      working-directory: ./skopeo
       run: |
-        git clone https://github.com/containers/skopeo.git src/github.com/containers/skopeo
-        cd src/github.com/containers/skopeo
         make bin/skopeo
         sudo cp bin/skopeo /usr/local/bin/skopeo
         skopeo --version
 
     # --- COMPILE BUILDAH ---
-    - name: Clone and Build Buildah (Latest)
+    - name: Clone Buildah (Latest)
+      run: git clone https://github.com/containers/buildah.git buildah
+
+    - name: Build and Install Buildah
+      working-directory: ./buildah
       run: |
-        git clone https://github.com/containers/buildah.git src/github.com/containers/buildah
-        cd src/github.com/containers/buildah
         make buildah TAGS="seccomp"
         sudo cp bin/buildah /usr/local/bin/buildah
         buildah --version
 
     # --- COMPILE PODMAN ---
-    - name: Clone and Build Podman (Latest)
+    - name: Clone Podman (Latest)
+      run: git clone https://github.com/containers/podman.git podman
+
+    - name: Build and Install Podman
+      working-directory: ./podman
       run: |
-        git clone https://github.com/containers/podman.git src/github.com/containers/podman
-        cd src/github.com/containers/podman
         make podman TAGS="seccomp"
         sudo cp bin/podman /usr/local/bin/podman
         podman --version
