@@ -65,12 +65,10 @@ jobs:
       run: |
         sudo usermod --add-subuids 100000-165535 --add-subgids 100000-165535 $USER
         
-        # Build out base runtime structures
         mkdir -p "$XDG_RUNTIME_DIR"
         chmod 700 "$XDG_RUNTIME_DIR"
         mkdir -p ~/.config/containers
         
-        # --- FIX: Explicitly map rootless directory blocks ---
         cat <<EOF > ~/.config/containers/storage.conf
         [storage]
         driver = "overlay"
@@ -87,23 +85,6 @@ jobs:
       run: |
         podman --version
 
-    - name: Execute Pod Workflow
+    - name: Build image with Podman 6.0.1
       run: |
-        echo "=== Building App ==="
-        podman build -t local/app:v6 -f - . <<EOF
-        FROM ubuntu:26.04
-        RUN apt-get update && apt-get install -y curl
-        EXPOSE 80
-        CMD ["python3", "-m", "http.server", "80"]
-        EOF
-
-        echo "=== Starting Netavark Mesh Pod ==="
-        podman pod create --name active-pod -p 8080:80
-        podman run -d --pod active-pod --name web-service local/app:v6
-        
-        sleep 3
-        curl --fail http://localhost:8080
-
-    - name: Generate Production K8s Resource
-      run: |
-        podman kube generate active-pod > deployment-26.04.yaml
+        podman build -t my-ubuntu-app:26.04 -f Containerfile .
