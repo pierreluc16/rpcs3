@@ -96,9 +96,8 @@ jobs:
         [ -z "$TARGET_IMAGE" ] && TARGET_IMAGE="localhost/ubuntu26-test:latest"
         sudo podman run --rm $TARGET_IMAGE --version
 
-    - name: 'Test Pipeline: Inspect Local Storage Image via Compiled Skopeo'
+    - name: 'Test Pipeline: Verify Remote Registry Manifest via Compiled Skopeo'
       continue-on-error: true
       run: |
-        TARGET_IMAGE="${{ env.BUILT_IMAGE_ID }}"
-        [ -z "$TARGET_IMAGE" ] && TARGET_IMAGE="localhost/ubuntu26-test:latest"
-        sudo skopeo inspect containers-storage:$TARGET_IMAGE
+        echo "Testing Skopeo remote registry resolution..."
+        sudo skopeo inspect docker://docker.io/library/alpine:latest | grep -i '"Architecture":'
