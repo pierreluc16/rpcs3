@@ -3,6 +3,7 @@ name: Official Podman 6.0.1 Source Compilation
 on:
   push:
     branches: [ "main" ]
+  # --- BLANK MANUAL LAUNCH BUTTON ---
   workflow_dispatch:
 
 jobs:
@@ -44,24 +45,30 @@ jobs:
       with:
         go-version: '1.22'
 
-    - name: Clone, Compile, and Configure Official Podman v6.0.1
+    - name: Clone and Compile Official Podman v6.0.1
       run: |
         git clone --depth 1 --branch v6.0.1 https://github.com/containers/podman.git
         cd podman
         
-        # Build and install engine binaries
+        # Build and install engine binaries globally
         make BUILDTAGS="seccomp apparmor" PREFIX=/usr
         sudo make install PREFIX=/usr
+
+    - name: Download Upstream Default Container Configurations
+      run: |
+        echo "=== Instantiating Default Policy and Registry Trees ==="
+        sudo mkdir -p /etc/containers
         
-        # --- FIX: Install official default configurations ---
-        sudo make install.config PREFIX=/usr
+        # Pulling the official default engine configurations directly from the upstream image organization
+        sudo curl -L -o /etc/containers/registries.conf https://raw.githubusercontent.com/containers/image/main/registries.conf
+        sudo curl -L -o /etc/containers/policy.json https://raw.githubusercontent.com/containers/image/main/default-policy.json
 
     - name: Configure Rootless Execution
       run: |
         sudo usermod --add-subuids 100000-165535 --add-subgids 100000-165535 $USER
         
-        # Force the environment to recognize rootless storage paths
-        mkdir -p mkdir -p ~/.config/containers
+        # Initialize rootless environment data structures
+        mkdir -p ~/.config/containers
         podman system migrate
 
     - name: Verify Upstream Release Version
@@ -69,9 +76,6 @@ jobs:
         podman --version
 
     - name: Execute Pod Workflow
-      env:
-        # Forces the custom build to read rootless paths explicitly
-        CONTAINER_ENGINE_ROOTLESS: 1
       run: |
         echo "=== Building App ==="
         podman build -t local/app:v6 -f - . <<EOF
@@ -89,7 +93,5 @@ jobs:
         curl --fail http://localhost:8080
 
     - name: Generate Production K8s Resource
-      env:
-        CONTAINER_ENGINE_ROOTLESS: 1
       run: |
         podman kube generate active-pod > deployment-26.04.yaml
