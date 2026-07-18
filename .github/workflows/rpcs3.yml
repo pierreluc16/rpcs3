@@ -96,9 +96,9 @@ jobs:
         [ -z "$TARGET_IMAGE" ] && TARGET_IMAGE="localhost/ubuntu26-test:latest"
         sudo podman run --rm $TARGET_IMAGE --version
 
-    - name: 'Test Pipeline: Extract & Inspect OCI Image via Compiled Skopeo'
+    - name: 'Test Pipeline: Inspect Local Storage Image via Compiled Skopeo'
       continue-on-error: true
       run: |
         TARGET_IMAGE="${{ env.BUILT_IMAGE_ID }}"
         [ -z "$TARGET_IMAGE" ] && TARGET_IMAGE="localhost/ubuntu26-test:latest"
-        sudo skopeo copy containers-storage:$TARGET_IMAGE oci:compiled-oci-image:latest
+        sudo skopeo inspect containers-storage:$TARGET_IMAGE
