@@ -58,6 +58,11 @@ jobs:
           mount_program = "/usr/bin/fuse-overlayfs"
           EOF
 
+      - name: Clear Invalid Global Registries Configuration
+        run: |
+          # Clear out-of-date v1 system configurations causing Podman 6.0.1 engine crashes
+          sudo rm -f /etc/containers/registries.conf
+
       - name: Verify Exact Installed Version
         run: |
           podman --version
