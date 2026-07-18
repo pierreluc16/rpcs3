@@ -1,4 +1,4 @@
-name: Build and Use Latest Podman, Buildah and Skopeo (Ubuntu 26.04)
+name: Compile and use latest Podman, Buildah and Skopeo
 
 on:
   push:
@@ -39,7 +39,7 @@ jobs:
           runc \
           uidmap
     # --- COMPILE SKOPEO ---
-    - name: Clone, Build, and Install Skopeo
+    - name: Clone,Build and Install Skopeo
       run: |
         git clone https://github.com/containers/skopeo.git skopeo
         cd skopeo
@@ -47,7 +47,7 @@ jobs:
         sudo cp bin/skopeo /usr/local/bin/skopeo
         skopeo --version
     # --- COMPILE BUILDAH ---
-    - name: Clone, Build, and Install Buildah
+    - name: Clone,Build and Install Buildah
       run: |
         git clone https://github.com/containers/buildah.git buildah
         cd buildah
@@ -55,7 +55,7 @@ jobs:
         sudo cp bin/buildah /usr/local/bin/buildah
         buildah --version
     # --- COMPILE PODMAN ---
-    - name: Clone, Build, and Install Podman
+    - name: Clone,Build and Install Podman
       run: |
         git clone https://github.com/containers/podman.git podman
         cd podman
