@@ -41,7 +41,8 @@ jobs:
           uidmap \
           dbus-user-session \
           libapparmor-dev \
-          containernetworking-plugins
+          containernetworking-plugins \
+          fuse-overlayfs
 
     - name: Setup Official Go Environment
       uses: actions/setup-go@v5
@@ -84,6 +85,14 @@ jobs:
     - name: Verify Upstream Release Version
       run: |
         podman --version
+
+    - name: Generate Containerfile
+      run: |
+        cat <<EOF > Containerfile
+        FROM ubuntu:26.04
+        RUN apt-get update && apt-get install -y curl && apt-get clean
+        CMD ["echo", "Hello from Podman 6.0.1 on Ubuntu 26.04"]
+        EOF
 
     - name: Build image with Podman 6.0.1
       run: |
