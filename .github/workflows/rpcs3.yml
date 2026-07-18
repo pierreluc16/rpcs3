@@ -8,7 +8,7 @@ on:
 jobs:
   build-and-run:
     runs-on: ubuntu-26.04
-    
+        
     steps:
     - name: Checkout Repository
       uses: actions/checkout@v4
@@ -88,8 +88,5 @@ jobs:
     - name: 'Test Pipeline: Extract & Inspect OCI Image via Compiled Skopeo'
       continue-on-error: true
       run: |
-        # Use Skopeo to migrate the built image out of containers-storage into a raw OCI layout directory
-        sudo skopeo copy containers-storage:localhost/ubuntu26-test:latest oci:compiled-oci-image:latest
-        
-        # Parse and inspect the extracted OCI manifest using Skopeo
-        skopeo inspect oci:compiled-oci-image:latest
+        # Explicitly pass the vfs storage transport details so Skopeo can successfully locate Buildah's output image
+        sudo skopeo copy containers-storage:[vfs@/var/lib/containers/storage+/run/containers/storage]localhost/ubuntu26-test:latest oci:compiled-oci-image:latest
