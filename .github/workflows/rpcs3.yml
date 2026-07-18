@@ -1,40 +1,63 @@
-name: Podman 6.0.1 on Ubuntu 26.04 LTS
+name: Official Podman 6.0.1 Source Compilation
 
 on:
   push:
     branches: [ "main" ]
+  # --- BLANK MANUAL LAUNCH BUTTON ---
   workflow_dispatch:
 
 jobs:
-  podman-6-pipeline:
-    runs-on: ubuntu-26.04 
-    
+  build-and-run:
+    runs-on: ubuntu-26.04
+
     steps:
     - name: Checkout Source Code
       uses: actions/checkout@v4
 
-    - name: Install Podman 6.0.1 Host Engine
+    - name: Install Official Build and Runtime Dependencies
       run: |
-        echo "=== Installing Environment Tools ==="
         sudo apt-get update
-        sudo apt-get install -y uidmap dbus-user-session conmon iptables catatonit
+        sudo apt-get install -y \
+          btrfs-progs \
+          git \
+          go-md2man \
+          iptables \
+          libassuan-dev \
+          libbtrfs-dev \
+          libc6-dev \
+          libdevmapper-dev \
+          libglib2.0-dev \
+          libgpgme-dev \
+          libgpg-error-dev \
+          libprotobuf-c-dev \
+          libprotobuf-dev \
+          libseccomp-dev \
+          libselinux1-dev \
+          libsystemd-dev \
+          pkg-config \
+          uidmap \
+          dbus-user-session \
+          libapparmor-dev
+
+    - name: Setup Official Go Environment
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.22'
+
+    - name: Clone and Compile Official Podman v6.0.1
+      run: |
+        git clone --depth 1 --branch v6.0.1 https://github.com/containers/podman.git
+        cd podman
+        # Build using native secure seccomp and apparmor flags recommended by upstream
+        make BUILDTAGS="seccomp apparmor" PREFIX=/usr
+        sudo make install PREFIX=/usr
         
-        echo "=== Fetching Upstream Podman 6.0.1 Static Asset ==="
-        # Downloading the true, full host engine package
-        curl -fsSL https://github.com/containers/podman/releases/download/v6.0.1/podman-static-amd64.tar.gz -o podman-static.tar.gz
-        tar -xzf podman-static.tar.gz
-        
-        echo "=== Overriding Native Package Binaries ==="
-        sudo cp -r podman-v6.0.1/* /usr/
-        rm -rf podman-v6.0.1 podman-static.tar.gz
-        
-        echo "=== Allocating Rootless Namespaces ==="
+    - name: Configure Rootless Execution
+      run: |
         sudo usermod --add-subuids 100000-165535 --add-subgids 100000-165535 $USER
-        
-        # This will now succeed with the correct full host engine binary
         podman system migrate
 
-    - name: Verify Version Block
+    - name: Verify Upstream Release Version
       run: |
         podman --version
 
