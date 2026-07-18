@@ -3,7 +3,6 @@ name: Official Podman 6.0.1 Source Compilation
 on:
   push:
     branches: [ "main" ]
-  # --- BLANK MANUAL LAUNCH BUTTON ---
   workflow_dispatch:
 
 jobs:
@@ -37,24 +36,32 @@ jobs:
           pkg-config \
           uidmap \
           dbus-user-session \
-          libapparmor-dev
+          libapparmor-dev \
+          containernetworking-plugins
 
     - name: Setup Official Go Environment
       uses: actions/setup-go@v5
       with:
         go-version: '1.22'
 
-    - name: Clone and Compile Official Podman v6.0.1
+    - name: Clone, Compile, and Configure Official Podman v6.0.1
       run: |
         git clone --depth 1 --branch v6.0.1 https://github.com/containers/podman.git
         cd podman
-        # Build using native secure seccomp and apparmor flags recommended by upstream
+        
+        # Build and install engine binaries
         make BUILDTAGS="seccomp apparmor" PREFIX=/usr
         sudo make install PREFIX=/usr
         
+        # --- FIX: Install official default configurations ---
+        sudo make install.config PREFIX=/usr
+
     - name: Configure Rootless Execution
       run: |
         sudo usermod --add-subuids 100000-165535 --add-subgids 100000-165535 $USER
+        
+        # Force the environment to recognize rootless storage paths
+        mkdir -p mkdir -p ~/.config/containers
         podman system migrate
 
     - name: Verify Upstream Release Version
@@ -62,6 +69,9 @@ jobs:
         podman --version
 
     - name: Execute Pod Workflow
+      env:
+        # Forces the custom build to read rootless paths explicitly
+        CONTAINER_ENGINE_ROOTLESS: 1
       run: |
         echo "=== Building App ==="
         podman build -t local/app:v6 -f - . <<EOF
@@ -79,5 +89,7 @@ jobs:
         curl --fail http://localhost:8080
 
     - name: Generate Production K8s Resource
+      env:
+        CONTAINER_ENGINE_ROOTLESS: 1
       run: |
         podman kube generate active-pod > deployment-26.04.yaml
