@@ -5,6 +5,11 @@ on:
     branches: [ "main" ]
   workflow_dispatch:
 
+# --- FIX: Define global rootless environments for all steps ---
+env:
+  XDG_RUNTIME_DIR: /home/runner/.runtime
+  CONTAINER_ENGINE_ROOTLESS: "1"
+
 jobs:
   build-and-run:
     runs-on: ubuntu-26.04
@@ -53,10 +58,7 @@ jobs:
 
     - name: Download Upstream Default Container Configurations
       run: |
-        echo "=== Instantiating Default Configuration Trees ==="
         sudo mkdir -p /etc/containers
-        
-        # Pulling official engine configurations and storage route helpers
         sudo curl -L -o /etc/containers/registries.conf https://raw.githubusercontent.com/containers/image/main/registries.conf
         sudo curl -L -o /etc/containers/policy.json https://raw.githubusercontent.com/containers/image/main/default-policy.json
         sudo curl -L -o /etc/containers/storage.conf https://raw.githubusercontent.com/containers/storage/main/storage.conf
@@ -65,10 +67,11 @@ jobs:
       run: |
         sudo usermod --add-subuids 100000-165535 --add-subgids 100000-165535 $USER
         
-        # Explicitly build rootless path footprints
+        # Build out the target system execution environments manually
+        mkdir -p "$XDG_RUNTIME_DIR"
+        chmod 700 "$XDG_RUNTIME_DIR"
         mkdir -p ~/.config/containers ~/.local/share/containers/storage
         
-        # Execute the migration inside user space
         podman system migrate
 
     - name: Verify Upstream Release Version
