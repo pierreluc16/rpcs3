@@ -13,14 +13,18 @@ jobs:
     - name: Checkout Repository
       uses: actions/checkout@v4
 
-    - name: Install Ubuntu 26.04 Build Dependencies
+    - name: Setup Go Environment
+      uses: actions/setup-go@v5
+      with:
+        go-version: 'stable'
+
+    - name: Install Ubuntu 26.04 Build & Runtime Dependencies
       run: |
         sudo apt-get update
         sudo apt-get install -y \
           golang-github-containers-common \
           btrfs-progs \
           git \
-          golang-go \
           go-md2man \
           libassuan-dev \
           libbtrfs-dev \
@@ -37,31 +41,38 @@ jobs:
           pkg-config \
           make \
           runc \
-          uidmap
+          uidmap \
+          conmon \
+          netavark \
+          containernetworking-plugins
+
     # --- COMPILE SKOPEO ---
-    - name: Clone,Build and Install Skopeo
+    - name: Clone, Build and Install Skopeo
       run: |
         git clone https://github.com/containers/skopeo.git skopeo
         cd skopeo
         make bin/skopeo
         sudo cp bin/skopeo /usr/local/bin/skopeo
         skopeo --version
+
     # --- COMPILE BUILDAH ---
-    - name: Clone,Build and Install Buildah
+    - name: Clone, Build and Install Buildah
       run: |
         git clone https://github.com/containers/buildah.git buildah
         cd buildah
         make buildah TAGS="seccomp"
         sudo cp bin/buildah /usr/local/bin/buildah
         buildah --version
+
     # --- COMPILE PODMAN ---
-    - name: Clone,Build and Install Podman
+    - name: Clone, Build and Install Podman
       run: |
         git clone https://github.com/containers/podman.git podman
         cd podman
         make podman TAGS="seccomp"
         sudo cp bin/podman /usr/local/bin/podman
         podman --version
+
     # --- PIPELINE INTEGRATION TEST ---
     - name: 'Create Containerfile'
       run: |
@@ -70,19 +81,34 @@ jobs:
         RUN apk add --no-cache curl
         ENTRYPOINT ["curl"]
         EOF
+
     - name: 'Build Image via Compiled Buildah'
       continue-on-error: true
       run: |
-        sudo buildah bud -t localhost/ubuntu26-test:latest
+        sudo buildah bud -t localhost/ubuntu26-test:latest 2>&1 | tee -a workflow_containers.log
         IMAGE_ID=$(sudo buildah images -q localhost/ubuntu26-test:latest)
         echo "BUILT_IMAGE_ID=$IMAGE_ID" >> $GITHUB_ENV
+
     - name: 'Run & Verify Image via Compiled Podman'
       continue-on-error: true
       run: |
-        sudo podman images
+        sudo podman images 2>&1 | tee -a workflow_containers.log
         TARGET_IMAGE="${{ env.BUILT_IMAGE_ID }}"
         [ -z "$TARGET_IMAGE" ] && TARGET_IMAGE="localhost/ubuntu26-test:latest"
-        sudo podman run --rm "$TARGET_IMAGE" echo "Podman successfully ran this container"
+        sudo podman run --rm "$TARGET_IMAGE" echo "Podman successfully ran this container" 2>&1 | tee -a workflow_containers.log
+
     - name: 'Test Image Sync via Compiled Skopeo'
       continue-on-error: true
-      run: skopeo copy docker://alpine:latest oci:local-alpine:latest
+      run: skopeo copy docker://alpine:latest oci:local-alpine:latest 2>&1 | tee -a workflow_containers.log
+
+    - name: 'Check for v1 Format Error'
+      if: always()
+      run: |
+        ERROR_STRING="/etc/containers/registries.conf: registries.conf must be in v2 format but is in v1"
+        
+        if [ -f workflow_containers.log ] && grep -Fq "$ERROR_STRING" workflow_containers.log; then
+          echo "::error::V1 format error detected in the logs: $ERROR_STRING"
+          exit 1
+        else
+          echo "No v1 format error detected in the logs."
+        fi
