@@ -76,22 +76,41 @@ jobs:
         EOF
 
     - name: 'Build Image via Compiled Buildah'
+      id: build_buildah
       continue-on-error: true
       run: |
-        sudo buildah bud -t localhost/ubuntu26-test:latest
+        sudo buildah bud -t localhost/ubuntu26-test:latest 2>&1 | tee buildah.log
         IMAGE_ID=$(sudo buildah images -q localhost/ubuntu26-test:latest)
         echo "BUILT_IMAGE_ID=$IMAGE_ID" >> $GITHUB_ENV
 
     - name: 'Run & Verify Image via Compiled Podman'
+      id: run_podman
       continue-on-error: true
       run: |
         sudo podman images
         TARGET_IMAGE="${{ env.BUILT_IMAGE_ID }}"
         [ -z "$TARGET_IMAGE" ] && TARGET_IMAGE="localhost/ubuntu26-test:latest"
-        sudo podman run --rm $TARGET_IMAGE --version
+        sudo podman run --rm $TARGET_IMAGE --version 2>&1 | tee podman.log
 
     - name: 'Inspect Remote Image via Compiled Skopeo'
+      id: inspect_skopeo
       continue-on-error: true
       run: |
         echo "Inspecting remote image manifest via compiled Skopeo..."
-        sudo skopeo inspect docker://docker.io/library/alpine:latest | grep -i '"Architecture":'
+        sudo skopeo inspect docker://docker.io/library/alpine:latest 2>&1 | tee skopeo.log | grep -i '"Architecture":'
+
+    # --- POST-CHECK & CONDITIONAL FAILURE ---
+    - name: Check for V1 Registries Error
+      if: always()
+      run: |
+        ERROR_STRING='"\/etc\/containers\/registries.conf": registries.conf must be in v2 format but is in v1'
+        
+        # Check if the error logs exist and contain the error string
+        if (test -f buildah.log && grep -E "$ERROR_STRING" buildah.log) || \
+           (test -f podman.log && grep -E "$ERROR_STRING" podman.log) || \
+           (test -f skopeo.log && grep -E "$ERROR_STRING" skopeo.log); then
+          
+          echo "::error::[CRITICAL FAILURE] The v1 registries format error was detected."
+          echo "::error::This configuration error impacted the runtime behavior of Podman, Buildah, and Skopeo."
+          exit 1
+        fi
