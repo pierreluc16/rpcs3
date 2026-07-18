@@ -10,8 +10,7 @@ jobs:
   podman-build:
     runs-on: ubuntu-26.04
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      
 
       - name: Install Build Dependencies
         run: |
