@@ -3,7 +3,6 @@ name: Podman 6.0.1 on Ubuntu 26.04 LTS
 on:
   push:
     branches: [ "main" ]
-  # --- BLANK MANUAL LAUNCH BUTTON ---
   workflow_dispatch:
 
 jobs:
@@ -14,23 +13,25 @@ jobs:
     - name: Checkout Source Code
       uses: actions/checkout@v4
 
-    - name: Pull and Install Static Podman 6.0.1 Binaries
+    - name: Install Podman 6.0.1 Host Engine
       run: |
-        echo "=== Installing Engine Dependencies ==="
+        echo "=== Installing Environment Tools ==="
         sudo apt-get update
         sudo apt-get install -y uidmap dbus-user-session conmon iptables catatonit
         
-        echo "=== Downloading Podman 6.0.1 Statically Linked Binary ==="
-        # Fetching the official compiled static assets directly from upstream containers release
-        curl -fsSL https://github.com/containers/podman/releases/download/v6.0.1/podman-remote-static-linux_amd64.tar.gz -o podman.tar.gz
-        tar -xzf podman.tar.gz
+        echo "=== Fetching Upstream Podman 6.0.1 Static Asset ==="
+        # Downloading the true, full host engine package
+        curl -fsSL https://github.com/containers/podman/releases/download/v6.0.1/podman-static-amd64.tar.gz -o podman-static.tar.gz
+        tar -xzf podman-static.tar.gz
         
-        # Move the true binary safely into execution spaces
-        sudo mv bin/podman-remote-static-linux_amd64 /usr/local/bin/podman
-        rm -rf bin podman.tar.gz
+        echo "=== Overriding Native Package Binaries ==="
+        sudo cp -r podman-v6.0.1/* /usr/
+        rm -rf podman-v6.0.1 podman-static.tar.gz
         
-        echo "=== Configuring User Sub-UIDs for Rootless ==="
+        echo "=== Allocating Rootless Namespaces ==="
         sudo usermod --add-subuids 100000-165535 --add-subgids 100000-165535 $USER
+        
+        # This will now succeed with the correct full host engine binary
         podman system migrate
 
     - name: Verify Version Block
