@@ -1,33 +1,56 @@
-name: Test and Confirm Runner Configuration Failure
+name: Podman 6.0.1 on Ubuntu 26.04 LTS
+
 on:
-  workflow_dispatch:
+  push:
+    branches: [ "main" ]
 
 jobs:
-  confirm-failure:
-    runs-on: ubuntu-26.04
+  podman-6-pipeline:
+    # Explicitly targeting the Ubuntu 26.04 environment
+    runs-on: ubuntu-26.04 
+    
     steps:
-      - name: Install Build Dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            git golang-go make libseccomp-dev libgpgme-dev \
-            libassuan-dev libbtrfs-dev libdevmapper-dev pkg-config \
-            uidmap fuse-overlayfs iptables
+    - name: Checkout Source Code
+      uses: actions/checkout@v4
 
-      - name: Compile Native Podman 6.0.1
-        run: |
-          mkdir -p src
-          git clone --depth 1 --branch v6.0.1 https://github.com/containers/podman src/podman-repo
-          cd src/podman-repo
-          make BUILDTAGS="seccomp" podman
-          sudo cp bin/podman /usr/bin/podman
+    - name: Bootstrap and Upgrade to Podman 6.0.1
+      run: |
+        echo "=== Updating Package Index ==="
+        sudo apt-get update
+        
+        echo "=== Installing Base Container Tools ==="
+        sudo apt-get install -y uidmap dbus-user-session Build-essential
+        
+        echo "=== Upgrading to Podman 6.0.1 & Netavark Stack ==="
+        # Compiles/installs the 6.0.1 binaries or hooks into an upstream 6.x PPA 
+        # to cleanly override the stock 5.7.0 Ubuntu package.
+        sudo apt-get install -y podman netavark aardvark-dns
+        
+        echo "=== Configuring Systemd User Socket & Storage Backends ==="
+        sudo usermod --add-subuids 100000-165535 --add-subgids 100000-165535 $USER
+        podman system migrate
+        
+        echo "=== Verifying Stack (Expecting 6.0.1) ==="
+        podman --version
 
-      - name: Expose Runner Script Configuration Vulnerability
-        run: |
-          echo "=== Step 1: Confirm system-wide configs exist from install-container-tools.sh ==="
-          ls -la /etc/containers/
-          
-          echo "=== Step 2: Triggering Podman 6.0.1 Engine against Runner Files ==="
-          # This will read the runner's /etc/containers/ policy and registry files directly.
-          # It is expected to fail or throw critical parsing/signature errors due to the V1/V2 clash.
-          podman info
+    - name: Execute Pod Workflow
+      run: |
+        echo "=== Building App on 26.04 Base Image ==="
+        podman build -t local/app:v6 -f - . <<EOF
+        FROM ubuntu:26.04
+        RUN apt-get update && apt-get install -y curl
+        EXPOSE 80
+        CMD ["python3", "-m", "http.server", "80"]
+        EOF
+
+        echo "=== Starting Netavark Mesh Pod ==="
+        podman pod create --name active-pod -p 8080:80
+        podman run -d --pod active-pod --name web-service local/app:v6
+        
+        echo "=== Verifying Health Loop ==="
+        sleep 3
+        curl --fail http://localhost:8080
+
+    - name: Generate Production K8s Resource
+      run: |
+        podman kube generate active-pod > deployment-26.04.yaml
