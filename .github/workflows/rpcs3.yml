@@ -38,36 +38,34 @@ jobs:
           make \
           runc \
           uidmap
-    # --- COMPILE SKOPEO ---
-    - name: Clone Skopeo (Latest)
-      run: git clone https://github.com/containers/skopeo.git skopeo
 
-    - name: Build and Install Skopeo
-      working-directory: ./skopeo
+    # --- COMPILE SKOPEO ---
+    - name: Clone, Build, and Install Skopeo
       run: |
+        git clone https://github.com/containers/skopeo.git skopeo
+        cd skopeo
         make bin/skopeo
         sudo cp bin/skopeo /usr/local/bin/skopeo
         skopeo --version
-    # --- COMPILE BUILDAH ---
-    - name: Clone Buildah (Latest)
-      run: git clone https://github.com/containers/buildah.git buildah
 
-    - name: Build and Install Buildah
-      working-directory: ./buildah
+    # --- COMPILE BUILDAH ---
+    - name: Clone, Build, and Install Buildah
       run: |
+        git clone https://github.com/containers/buildah.git buildah
+        cd buildah
         make buildah TAGS="seccomp"
         sudo cp bin/buildah /usr/local/bin/buildah
         buildah --version
-    # --- COMPILE PODMAN ---
-    - name: Clone Podman (Latest)
-      run: git clone https://github.com/containers/podman.git podman
 
-    - name: Build and Install Podman
-      working-directory: ./podman
+    # --- COMPILE PODMAN ---
+    - name: Clone, Build, and Install Podman
       run: |
+        git clone https://github.com/containers/podman.git podman
+        cd podman
         make podman TAGS="seccomp"
         sudo cp bin/podman /usr/local/bin/podman
         podman --version
+
     # --- PIPELINE INTEGRATION TEST ---
     - name: 'Create Containerfile'
       run: |
@@ -76,12 +74,14 @@ jobs:
         RUN apk add --no-cache curl
         ENTRYPOINT ["curl"]
         EOF
+
     - name: 'Build Image via Compiled Buildah'
       continue-on-error: true
       run: |
-        sudo buildah bud -t localhost/ubuntu26-test:latest .
+        sudo buildah bud -t localhost/ubuntu26-test:latest
         IMAGE_ID=$(sudo buildah images -q localhost/ubuntu26-test:latest)
         echo "BUILT_IMAGE_ID=$IMAGE_ID" >> $GITHUB_ENV
+
     - name: 'Run & Verify Image via Compiled Podman'
       continue-on-error: true
       run: |
@@ -89,6 +89,7 @@ jobs:
         TARGET_IMAGE="${{ env.BUILT_IMAGE_ID }}"
         [ -z "$TARGET_IMAGE" ] && TARGET_IMAGE="localhost/ubuntu26-test:latest"
         sudo podman run --rm $TARGET_IMAGE --version
+
     - name: 'Inspect Remote Image via Compiled Skopeo'
       continue-on-error: true
       run: |
