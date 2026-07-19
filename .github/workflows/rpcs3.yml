@@ -74,7 +74,10 @@ jobs:
     # --- CONFIGURE ROOTLESS ENVIRONMENT ---
     - name: Configure Rootless Environment
       run: |
-        # Ensure kernel is configured for ample user namespaces
+        # FIX: Explicitly disable AppArmor/kernel restrictions on unprivileged user namespaces
+        sudo sysctl -w kernel.unprivileged_userns_clone=1 || true
+        
+        # Additionally, on modern Ubuntu runners, explicitly allow unprivileged userns nesting via sysctl if supported
         sudo sysctl -w user.max_user_namespaces=28633
         
         # Setup local container configuration directories
