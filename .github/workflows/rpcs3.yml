@@ -18,48 +18,31 @@ jobs:
         sudo apt-get update && sudo apt-get install -y apparmor-utils
         
         sudo cat <<EOF | sudo tee /etc/apparmor.d/custom_containers
+        abi <abi/4.0>,
         #include <tunables/global>
 
-        # Profile for Podman
-        profile custom-podman /usr/bin/podman flags=(attach_disconnected) {
-          #include <abstractions/base>
-          
-          # Allow creating user namespaces under Ubuntu's restriction
+        # Profile for Podman (compiled to /usr/bin/podman)
+        profile custom-podman /usr/bin/podman flags=(unconfined) {
           userns,
-
-          # CRITICAL: Allow self re-exec via both standard path and procfs
-          /usr/bin/podman ix,
+          
+          # Allow internal overrides and self re-exec mechanisms
           owner /proc/self/exe ix,
-
-          # Target file and execution allowances
-          capability,
-          file,
-          network,
           audit deny /proc/self/exe rw,
         }
 
-        # Profile for Buildah
-        profile custom-buildah /usr/local/bin/buildah flags=(attach_disconnected) {
-          #include <abstractions/base>
-
-          # Allow creating user namespaces under Ubuntu's restriction
+        # Profile for Buildah (compiled to /usr/local/bin/buildah)
+        profile custom-buildah /usr/local/bin/buildah flags=(unconfined) {
           userns,
-
-          # CRITICAL: Allow self re-exec via both standard path and procfs
-          /usr/local/bin/buildah ix,
+          
+          # Allow internal overrides and self re-exec mechanisms
           owner /proc/self/exe ix,
-
-          # Target file and execution allowances
-          capability,
-          file,
-          network,
           audit deny /proc/self/exe rw,
         }
         EOF
         
-        # Explicitly parse the profile into the kernel and restart service
+        # Force compile and load the specialized profile into kernel space
         sudo apparmor_parser -r /etc/apparmor.d/custom_containers
-        sudo systemctl restart apparmor
+        
     - name: Setup Go Environment
       uses: actions/setup-go@v5
       with:
@@ -92,6 +75,7 @@ jobs:
           netavark \
           containernetworking-plugins \
           fuse-overlayfs
+
     # --- COMPILE & INSTALL SKOPEO ---
     - name: Clone, Build and Install Skopeo
       run: |
@@ -99,6 +83,7 @@ jobs:
         cd skopeo
         make bin/skopeo
         sudo make install
+
     # --- COMPILE & INSTALL BUILDAH ---
     - name: Clone, Build and Install Buildah
       run: |
@@ -106,6 +91,7 @@ jobs:
         cd buildah
         make TAGS="seccomp"
         sudo make install
+
     # --- COMPILE & INSTALL PODMAN ---
     - name: Clone, Build and Install Podman
       run: |
@@ -113,6 +99,7 @@ jobs:
         cd podman
         make BUILDTAGS="seccomp systemd security" PREFIX=/usr
         sudo env PATH=$PATH make install PREFIX=/usr
+
     # --- CONFIGURE ROOTLESS STORAGE ---
     - name: Configure Rootless Storage
       run: |
@@ -123,6 +110,7 @@ jobs:
         [storage.options.overlay]
         mount_program = "/usr/bin/fuse-overlayfs"
         EOF
+
     # --- PIPELINE INTEGRATION TEST ---
     - name: 'Create Containerfile'
       run: |
@@ -131,12 +119,14 @@ jobs:
         RUN apk add --no-cache curl
         ENTRYPOINT ["curl"]
         EOF
+
     - name: 'Build Image via Compiled Buildah'
       continue-on-error: true
       run: | 
         buildah bud --isolation=chroot -t localhost/ubuntu26-test:latest .
         IMAGE_ID=$(buildah images -q localhost/ubuntu26-test:latest)
         echo "BUILT_IMAGE_ID=$IMAGE_ID" >> $GITHUB_ENV
+
     - name: 'Run & Verify Image via Compiled Podman'
       continue-on-error: true
       run: | 
@@ -145,10 +135,12 @@ jobs:
         [ -z "$TARGET_IMAGE" ] && TARGET_IMAGE="localhost/ubuntu26-test:latest"
         
         podman run --rm --entrypoint echo "$TARGET_IMAGE" "Podman successfully ran rootless container!" 
+
     - name: 'Test Image Sync via Compiled Skopeo'
       continue-on-error: true
       run: |
         skopeo copy docker://alpine:latest oci:local-alpine:latest
+
     # --- Fail because of v1 format error ---
     - name: 'Fail because of v1 format error'
       run: |
