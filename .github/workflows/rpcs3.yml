@@ -12,13 +12,22 @@ jobs:
     steps:
     - name: Checkout Repository
       uses: actions/checkout@v4
-
-    # FIX: This MUST run first to allow custom binaries to call unshare()
-    - name: Disable Ubuntu 26.04 AppArmor Namespace Restrictions
+ 
+    - name: Configure Targeted AppArmor Profiles
       run: |
-        sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
-        sudo sysctl -w kernel.unprivileged_userns_clone=1 || true
-        sudo sysctl -w user.max_user_namespaces=28633 || true
+        sudo apt-get update && sudo apt-get install -y apparmor-utils
+        sudo cat <<EOF | sudo tee /etc/apparmor.d/custom_containers
+        #include <tunables/global>
+
+        profile custom-podman /usr/bin/podman flags=(unconfined) {
+          userns,
+        }
+
+        profile custom-buildah /usr/local/bin/buildah flags=(unconfined) {
+          userns,
+        }
+        EOF
+        sudo systemctl restart apparmor
 
     - name: Setup Go Environment
       uses: actions/setup-go@v5
@@ -99,16 +108,13 @@ jobs:
         EOF
 
     - name: 'Build Image via Compiled Buildah'
-      continue-on-error: true
-      run: |
-        # Using --isolation=chroot fallback handles virtualization safely inside CI
+      run: | 
         buildah bud --isolation=chroot -t localhost/ubuntu26-test:latest .
         IMAGE_ID=$(buildah images -q localhost/ubuntu26-test:latest)
         echo "BUILT_IMAGE_ID=$IMAGE_ID" >> $GITHUB_ENV
 
     - name: 'Run & Verify Image via Compiled Podman'
-      continue-on-error: true
-      run: |
+      run: | 
         podman images 
         TARGET_IMAGE="${{ env.BUILT_IMAGE_ID }}"
         [ -z "$TARGET_IMAGE" ] && TARGET_IMAGE="localhost/ubuntu26-test:latest"
@@ -116,12 +122,12 @@ jobs:
         podman run --rm --entrypoint echo "$TARGET_IMAGE" "Podman successfully ran rootless container!" 
 
     - name: 'Test Image Sync via Compiled Skopeo'
-      continue-on-error: true
       run: |
         skopeo copy docker://alpine:latest oci:local-alpine:latest
 
     # --- Fail because of v1 format error ---
     - name: 'Fail because of v1 format error'
+      
       run: |
         echo 'Error: "/etc/containers/registries.conf": registries.conf must be in v2 format but is in v1'
         exit 1
