@@ -13,7 +13,7 @@ jobs:
     - name: Checkout Repository
       uses: actions/checkout@v4
  
-    - name: Configure Targeted AppArmor Profiles (Strict Mode)
+    - name: Configure Targeted AppArmor Profiles
       run: |
         sudo apt-get update && sudo apt-get install -y apparmor-utils
         
