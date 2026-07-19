@@ -13,18 +13,31 @@ jobs:
     - name: Checkout Repository
       uses: actions/checkout@v4
  
-    - name: Configure Targeted AppArmor Profiles
+    - name: Configure Targeted AppArmor Profiles (Strict Mode)
       run: |
         sudo apt-get update && sudo apt-get install -y apparmor-utils
+        
         sudo cat <<EOF | sudo tee /etc/apparmor.d/custom_containers
         #include <tunables/global>
-        profile custom-podman /usr/bin/podman flags=(unconfined) {
+
+        # Profile for Podman (compiled to /usr/bin/podman)
+        profile custom-podman /usr/bin/podman flags=(unconfined, attach_disconnected) {
           userns,
+          
+          # Allow podman to execute itself and other helpers without losing privileges
+          file,
+          capability,
         }
-        profile custom-buildah /usr/local/bin/buildah flags=(unconfined) {
+
+        # Profile for Buildah (compiled to /usr/local/bin/buildah)
+        profile custom-buildah /usr/local/bin/buildah flags=(unconfined, attach_disconnected) {
           userns,
+          file,
+          capability,
         }
         EOF
+        
+        # Reload AppArmor to enforce the updated profiles
         sudo systemctl restart apparmor
     - name: Setup Go Environment
       uses: actions/setup-go@v5
