@@ -98,6 +98,20 @@ jobs:
         mount_program = "/usr/bin/fuse-overlayfs"
         EOF
 
+    # --- FIX REGISTRIES CONFIGURATION (V2 FORMAT) ---
+    - name: Configure Container Registries (V2 Format)
+      run: |
+        sudo mkdir -p /etc/containers
+        cat <<EOF | sudo tee /etc/containers/registries.conf
+        unqualified-search-registries = ["docker.io", "quay.io"]
+
+        [[registry]]
+        location = "docker.io"
+
+        [[registry]]
+        location = "quay.io"
+        EOF
+
     # --- PIPELINE INTEGRATION TEST ---
     - name: 'Create Containerfile'
       run: |
@@ -126,4 +140,4 @@ jobs:
     - name: 'Test Image Sync via Compiled Skopeo'
       continue-on-error: true
       run: |
-        skopeo copy docker://alpine:latest oci:local-alpine:latest    
+        skopeo copy docker://alpine:latest oci:local-alpine:latest
