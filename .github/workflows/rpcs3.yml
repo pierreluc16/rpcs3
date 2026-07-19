@@ -60,27 +60,37 @@ jobs:
           netavark \
           containernetworking-plugins \
           fuse-overlayfs
+
     # --- COMPILE & INSTALL SKOPEO ---
     - name: Clone, Build and Install Skopeo
       run: |
-        git clone https://github.com/containers/skopeo.git skopeo
+        SKOPEO_TAG=$(curl -s https://api.github.com/repos/containers/skopeo/releases/latest | jq -r .tag_name)
+        echo "Fetching Skopeo stable tag: $SKOPEO_TAG"
+        git clone --depth 1 --branch "$SKOPEO_TAG" https://github.com/containers/skopeo.git skopeo
         cd skopeo
         make bin/skopeo
         sudo make install
+
     # --- COMPILE & INSTALL BUILDAH ---
     - name: Clone, Build and Install Buildah
       run: |
-        git clone https://github.com/containers/buildah.git buildah
+        BUILDAH_TAG=$(curl -s https://api.github.com/repos/containers/buildah/releases/latest | jq -r .tag_name)
+        echo "Fetching Buildah stable tag: $BUILDAH_TAG"
+        git clone --depth 1 --branch "$BUILDAH_TAG" https://github.com/containers/buildah.git buildah
         cd buildah
         make TAGS="seccomp"
         sudo make install
+
     # --- COMPILE & INSTALL PODMAN ---
     - name: Clone, Build and Install Podman
       run: |
-        git clone https://github.com/containers/podman.git podman
+        PODMAN_TAG=$(curl -s https://api.github.com/repos/containers/podman/releases/latest | jq -r .tag_name)
+        echo "Fetching Podman stable tag: $PODMAN_TAG"
+        git clone --depth 1 --branch "$PODMAN_TAG" https://github.com/containers/podman.git podman
         cd podman
         make BUILDTAGS="seccomp systemd security" PREFIX=/usr
         sudo env PATH=$PATH make install PREFIX=/usr
+
     # --- CONFIGURE ROOTLESS STORAGE ---
     - name: Configure Rootless Storage
       run: |
@@ -91,6 +101,7 @@ jobs:
         [storage.options.overlay]
         mount_program = "/usr/bin/fuse-overlayfs"
         EOF
+
     # --- PIPELINE INTEGRATION TEST ---
     - name: Create Containerfile
       run: |
@@ -99,6 +110,7 @@ jobs:
         RUN apk add --no-cache curl
         ENTRYPOINT ["curl"]
         EOF
+
     - name: Buildah test, Podman test and Skopeo test
       run: |
         # Initialize an error tracker flag
@@ -132,6 +144,6 @@ jobs:
         fi
         # Exit with error status only if one of the steps above failed
         if [ $STATUS -ne 0 ]; then
-          echo "Buildah test,Podman test and Skopeo test failed."
+          echo "Buildah test, Podman test and Skopeo test failed."
           exit 1
         fi
