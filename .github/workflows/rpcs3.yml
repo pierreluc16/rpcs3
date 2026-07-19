@@ -13,6 +13,13 @@ jobs:
     - name: Checkout Repository
       uses: actions/checkout@v4
 
+    # FIX: This MUST run first to allow custom binaries to call unshare()
+    - name: Disable Ubuntu 26.04 AppArmor Namespace Restrictions
+      run: |
+        sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+        sudo sysctl -w kernel.unprivileged_userns_clone=1 || true
+        sudo sysctl -w user.max_user_namespaces=28633
+
     - name: Setup Go Environment
       uses: actions/setup-go@v5
       with:
@@ -71,19 +78,10 @@ jobs:
         make BUILDTAGS="seccomp systemd security" PREFIX=/usr
         sudo env PATH=$PATH make install PREFIX=/usr
 
-    # --- CONFIGURE ROOTLESS ENVIRONMENT ---
-    - name: Configure Rootless Environment
+    # --- CONFIGURE ROOTLESS STORAGE ---
+    - name: Configure Rootless Storage
       run: |
-        # FIX: Explicitly disable AppArmor/kernel restrictions on unprivileged user namespaces
-        sudo sysctl -w kernel.unprivileged_userns_clone=1 || true
-        
-        # Additionally, on modern Ubuntu runners, explicitly allow unprivileged userns nesting via sysctl if supported
-        sudo sysctl -w user.max_user_namespaces=28633
-        
-        # Setup local container configuration directories
         mkdir -p ~/.config/containers
-        
-        # Force container tools to use fuse-overlayfs if native overlay breaks rootless namespaces
         cat <<EOF > ~/.config/containers/storage.conf
         [storage]
         driver = "overlay"
@@ -102,7 +100,8 @@ jobs:
 
     - name: 'Build Image via Compiled Buildah'
       run: |
-        buildah bud -t localhost/ubuntu26-test:latest .
+        # Using --isolation=chroot fallback handles virtualization safely inside CI
+        buildah bud --isolation=chroot -t localhost/ubuntu26-test:latest .
         IMAGE_ID=$(buildah images -q localhost/ubuntu26-test:latest)
         echo "BUILT_IMAGE_ID=$IMAGE_ID" >> $GITHUB_ENV
 
@@ -112,7 +111,6 @@ jobs:
         TARGET_IMAGE="${{ env.BUILT_IMAGE_ID }}"
         [ -z "$TARGET_IMAGE" ] && TARGET_IMAGE="localhost/ubuntu26-test:latest"
         
-        # Override entrypoint so the container echoes our message instead of treating it as a URL for curl
         podman run --rm --entrypoint echo "$TARGET_IMAGE" "Podman successfully ran rootless container!" 
 
     - name: 'Test Image Sync via Compiled Skopeo'
