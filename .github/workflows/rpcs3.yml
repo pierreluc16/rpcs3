@@ -1,18 +1,17 @@
-name: Compile and use latest Podman, Buildah and Skopeo
-
+name: Compile and use latest Podman, Buildah and Skopeoon:
 on:
   push:
     branches: [ main ]
-  workflow_dispatch: 
+  workflow_dispatch:
 
 jobs:
   build-and-run:
     runs-on: ubuntu-26.04
-        
+    
     steps:
     - name: Checkout Repository
       uses: actions/checkout@v4
- 
+
     - name: Completely Remove AppArmor Restrictions and Allow Unshare
       run: |
         # 1. Kill and remove AppArmor completely
@@ -98,22 +97,8 @@ jobs:
         mount_program = "/usr/bin/fuse-overlayfs"
         EOF
 
-    # --- FIX REGISTRIES CONFIGURATION (V2 FORMAT) ---
-    - name: Configure Container Registries (V2 Format)
-      run: |
-        sudo mkdir -p /etc/containers
-        cat <<EOF | sudo tee /etc/containers/registries.conf
-        unqualified-search-registries = ["docker.io", "quay.io"]
-
-        [[registry]]
-        location = "docker.io"
-
-        [[registry]]
-        location = "quay.io"
-        EOF
-
     # --- PIPELINE INTEGRATION TEST ---
-    - name: 'Create Containerfile'
+    - name: Create Containerfile
       run: |
         cat <<EOF > Containerfile
         FROM alpine:latest
@@ -121,23 +106,18 @@ jobs:
         ENTRYPOINT ["curl"]
         EOF
 
-    - name: 'Build Image via Compiled Buildah'
-      
-      run: | 
+    - name: Buildah test, Podman test and Skopeo test
+      run: |
+        echo "=== 1. Testing Buildah Build ==="
         buildah bud --isolation=chroot -t localhost/ubuntu26-test:latest .
         IMAGE_ID=$(buildah images -q localhost/ubuntu26-test:latest)
-        echo "BUILT_IMAGE_ID=$IMAGE_ID" >> $GITHUB_ENV
-
-    - name: 'Run & Verify Image via Compiled Podman'
-      
-      run: | 
-        podman images 
-        TARGET_IMAGE="${{ env.BUILT_IMAGE_ID }}"
-        [ -z "$TARGET_IMAGE" ] && TARGET_IMAGE="localhost/ubuntu26-test:latest"
+        echo "Successfully built image with ID: $IMAGE_ID"
         
-        podman run --rm --entrypoint echo "$TARGET_IMAGE" "Podman successfully ran rootless container!" 
-
-    - name: 'Test Image Sync via Compiled Skopeo'
-      
-      run: |
+        echo "=== 2. Testing Podman Execution ==="
+        podman images
+        TARGET_IMAGE="${IMAGE_ID:-localhost/ubuntu26-test:latest}"
+        podman run --rm --entrypoint echo "$TARGET_IMAGE" "Podman successfully ran rootless container!"
+        
+        echo "=== 3. Testing Skopeo Sync ==="
         skopeo copy docker://alpine:latest oci:local-alpine:latest
+        echo "Skopeo successfully synced Alpine image to local OCI layout."
