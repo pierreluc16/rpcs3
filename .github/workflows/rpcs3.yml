@@ -122,14 +122,14 @@ jobs:
         EOF
 
     - name: 'Build Image via Compiled Buildah'
-      continue-on-error: true
+      
       run: | 
         buildah bud --isolation=chroot -t localhost/ubuntu26-test:latest .
         IMAGE_ID=$(buildah images -q localhost/ubuntu26-test:latest)
         echo "BUILT_IMAGE_ID=$IMAGE_ID" >> $GITHUB_ENV
 
     - name: 'Run & Verify Image via Compiled Podman'
-      continue-on-error: true
+      
       run: | 
         podman images 
         TARGET_IMAGE="${{ env.BUILT_IMAGE_ID }}"
@@ -138,6 +138,6 @@ jobs:
         podman run --rm --entrypoint echo "$TARGET_IMAGE" "Podman successfully ran rootless container!" 
 
     - name: 'Test Image Sync via Compiled Skopeo'
-      continue-on-error: true
+      
       run: |
         skopeo copy docker://alpine:latest oci:local-alpine:latest
