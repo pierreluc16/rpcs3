@@ -18,17 +18,14 @@ jobs:
         sudo apt-get update && sudo apt-get install -y apparmor-utils
         sudo cat <<EOF | sudo tee /etc/apparmor.d/custom_containers
         #include <tunables/global>
-
         profile custom-podman /usr/bin/podman flags=(unconfined) {
           userns,
         }
-
         profile custom-buildah /usr/local/bin/buildah flags=(unconfined) {
           userns,
         }
         EOF
         sudo systemctl restart apparmor
-
     - name: Setup Go Environment
       uses: actions/setup-go@v5
       with:
@@ -38,7 +35,6 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y \
-          golang-github-containers-common \
           btrfs-progs \
           git \
           go-md2man \
@@ -62,7 +58,6 @@ jobs:
           netavark \
           containernetworking-plugins \
           fuse-overlayfs
-
     # --- COMPILE & INSTALL SKOPEO ---
     - name: Clone, Build and Install Skopeo
       run: |
@@ -70,7 +65,6 @@ jobs:
         cd skopeo
         make bin/skopeo
         sudo make install
-
     # --- COMPILE & INSTALL BUILDAH ---
     - name: Clone, Build and Install Buildah
       run: |
@@ -78,7 +72,6 @@ jobs:
         cd buildah
         make TAGS="seccomp"
         sudo make install
-
     # --- COMPILE & INSTALL PODMAN ---
     - name: Clone, Build and Install Podman
       run: |
@@ -86,7 +79,6 @@ jobs:
         cd podman
         make BUILDTAGS="seccomp systemd security" PREFIX=/usr
         sudo env PATH=$PATH make install PREFIX=/usr
-
     # --- CONFIGURE ROOTLESS STORAGE ---
     - name: Configure Rootless Storage
       run: |
@@ -97,7 +89,6 @@ jobs:
         [storage.options.overlay]
         mount_program = "/usr/bin/fuse-overlayfs"
         EOF
-
     # --- PIPELINE INTEGRATION TEST ---
     - name: 'Create Containerfile'
       run: |
@@ -106,14 +97,12 @@ jobs:
         RUN apk add --no-cache curl
         ENTRYPOINT ["curl"]
         EOF
-
     - name: 'Build Image via Compiled Buildah'
       continue-on-error: true
       run: | 
         buildah bud --isolation=chroot -t localhost/ubuntu26-test:latest .
         IMAGE_ID=$(buildah images -q localhost/ubuntu26-test:latest)
         echo "BUILT_IMAGE_ID=$IMAGE_ID" >> $GITHUB_ENV
-
     - name: 'Run & Verify Image via Compiled Podman'
       continue-on-error: true
       run: | 
@@ -122,8 +111,12 @@ jobs:
         [ -z "$TARGET_IMAGE" ] && TARGET_IMAGE="localhost/ubuntu26-test:latest"
         
         podman run --rm --entrypoint echo "$TARGET_IMAGE" "Podman successfully ran rootless container!" 
-
     - name: 'Test Image Sync via Compiled Skopeo'
       continue-on-error: true
       run: |
-        skopeo copy docker://alpine:latest oci:local-alpine:latest    
+        skopeo copy docker://alpine:latest oci:local-alpine:latest
+    # --- Fail because of v1 format error ---
+    - name: 'Fail because of v1 format error'
+      run: |
+        echo 'Error: "/etc/containers/registries.conf": registries.conf must be in v2 format but is in v1'
+        exit 1
