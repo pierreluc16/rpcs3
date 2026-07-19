@@ -60,7 +60,6 @@ jobs:
           netavark \
           containernetworking-plugins \
           fuse-overlayfs
-
     # --- COMPILE & INSTALL SKOPEO ---
     - name: Clone, Build and Install Skopeo
       run: |
@@ -70,7 +69,6 @@ jobs:
         cd skopeo
         make bin/skopeo PREFIX=/usr/local
         sudo make install PREFIX=/usr/local
-
     # --- COMPILE & INSTALL BUILDAH ---
     - name: Clone, Build and Install Buildah
       run: |
@@ -80,7 +78,6 @@ jobs:
         cd buildah
         make TAGS="seccomp" PREFIX=/usr/local
         sudo env "PATH=$PATH" make install PREFIX=/usr/local
-
     # --- COMPILE & INSTALL PODMAN ---
     - name: Clone, Build and Install Podman
       run: |
@@ -90,7 +87,6 @@ jobs:
         cd podman
         make BUILDTAGS="seccomp systemd security" PREFIX=/usr/local
         sudo env "PATH=$PATH" make install PREFIX=/usr/local
-
     # --- CONFIGURE ROOTLESS STORAGE ---
     - name: Configure Rootless Storage
       run: |
@@ -101,19 +97,6 @@ jobs:
         [storage.options.overlay]
         mount_program = "/usr/bin/fuse-overlayfs"
         EOF
-
-    # --- FIX REGISTRIES CONFIGURATION (V2 FORMAT) ---
-    - name: Configure Container Registries (V2 Format)
-      run: |
-        sudo mkdir -p /etc/containers
-        cat <<EOF | sudo tee /etc/containers/registries.conf
-        unqualified-search-registries = ["docker.io", "quay.io"]
-        [[registry]]
-        location = "docker.io"
-        [[registry]]
-        location = "quay.io"
-        EOF
-
     # --- PIPELINE INTEGRATION TEST ---
     - name: Create Containerfile
       run: |
@@ -122,7 +105,6 @@ jobs:
         RUN apk add --no-cache curl
         ENTRYPOINT ["curl"]
         EOF
-
     - name: Buildah test, Podman test and Skopeo test
       run: |
         STATUS=0
