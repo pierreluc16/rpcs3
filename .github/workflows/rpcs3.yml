@@ -1,4 +1,5 @@
-name: Compile and use latest Podman, Buildah and Skopeoon:
+name: Compile and use latest Podman, Buildah and Skopeo
+
 on:
   push:
     branches: [ main ]
