@@ -109,16 +109,39 @@ jobs:
 
     - name: Buildah test, Podman test and Skopeo test
       run: |
+        # Initialize an error tracker flag
+        STATUS=0
+
         echo "=== 1. Testing Buildah Build ==="
-        buildah bud --isolation=chroot -t localhost/ubuntu26-test:latest .
-        IMAGE_ID=$(buildah images -q localhost/ubuntu26-test:latest)
-        echo "Successfully built image with ID: $IMAGE_ID"
+        if buildah bud --isolation=chroot -t localhost/ubuntu26-test:latest .; then
+          IMAGE_ID=$(buildah images -q localhost/ubuntu26-test:latest)
+          echo "Successfully built image with ID: $IMAGE_ID"
+        else
+          echo "::error::Buildah test failed!"
+          STATUS=1
+        fi
         
         echo "=== 2. Testing Podman Execution ==="
-        podman images
+        podman images || true
         TARGET_IMAGE="${IMAGE_ID:-localhost/ubuntu26-test:latest}"
-        podman run --rm --entrypoint echo "$TARGET_IMAGE" "Podman successfully ran rootless container!"
+        
+        if podman run --rm --entrypoint echo "$TARGET_IMAGE" "Podman successfully ran rootless container!"; then
+          echo "Podman test passed!"
+        else
+          echo "::error::Podman test failed!"
+          STATUS=1
+        fi
         
         echo "=== 3. Testing Skopeo Sync ==="
-        skopeo copy docker://alpine:latest oci:local-alpine:latest
-        echo "Skopeo successfully synced Alpine image to local OCI layout."
+        if skopeo copy docker://alpine:latest oci:local-alpine:latest; then
+          echo "Skopeo successfully synced Alpine image to local OCI layout."
+        else
+          echo "::error::Skopeo test failed!"
+          STATUS=1
+        fi
+
+        # Exit with error status only if one of the steps above failed
+        if [ $STATUS -ne 0 ]; then
+          echo "One or more integration tests failed."
+          exit 1
+        fi
