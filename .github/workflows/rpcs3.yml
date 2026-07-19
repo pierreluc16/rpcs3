@@ -20,20 +20,38 @@ jobs:
         sudo cat <<EOF | sudo tee /etc/apparmor.d/custom_containers
         #include <tunables/global>
 
-        # Profile for Podman (compiled to /usr/bin/podman)
-        profile custom-podman /usr/bin/podman flags=(unconfined, attach_disconnected) {
-          userns,
+        # Profile for Podman
+        profile custom-podman /usr/bin/podman flags=(attach_disconnected) {
+          # Include standard system abstractions
+          #include <abstractions/base>
           
-          # Allow podman to execute itself and other helpers without losing privileges
-          file,
+          # Allow creating user namespaces under Ubuntu's restriction
+          userns,
+
+          # Allow podman to re-exec itself and inherit this profile
+          /usr/bin/podman ix,
+
+          # Capabilities and broad file access required for container management
           capability,
+          file,
+          network,
         }
 
-        # Profile for Buildah (compiled to /usr/local/bin/buildah)
-        profile custom-buildah /usr/local/bin/buildah flags=(unconfined, attach_disconnected) {
+        # Profile for Buildah
+        profile custom-buildah /usr/local/bin/buildah flags=(attach_disconnected) {
+          # Include standard system abstractions
+          #include <abstractions/base>
+
+          # Allow creating user namespaces under Ubuntu's restriction
           userns,
-          file,
+
+          # Allow buildah to re-exec itself and inherit this profile
+          /usr/local/bin/buildah ix,
+
+          # Capabilities and broad file access required for container management
           capability,
+          file,
+          network,
         }
         EOF
         
