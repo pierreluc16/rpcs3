@@ -13,12 +13,22 @@ jobs:
     - name: Checkout Repository
       uses: actions/checkout@v4
  
-    - name: Disable and Remove AppArmor
+    - name: Completely Remove AppArmor Restrictions and Allow Unshare
       run: |
-        sudo systemctl stop apparmor
-        sudo systemctl disable apparmor
+        # 1. Kill and remove AppArmor completely
+        sudo systemctl stop apparmor || true
+        sudo systemctl disable apparmor || true
         sudo service apparmor teardown || true
-        sudo apt-get purge -y apparmor
+        sudo apt-get purge -y apparmor apparmor-utils
+
+        # 2. Force the kernel to allow unprivileged unshare operations
+        sudo sysctl -w kernel.unprivileged_userns_clone=1
+        sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+        sudo sysctl -w user.max_user_namespaces=28633
+
+        # 3. Prevent systemd from applying restricted namespaces to user sessions
+        echo "DefaultTasksMax=infinity" | sudo tee -a /etc/systemd/system.conf
+        sudo systemctl daemon-reexec
         
     - name: Setup Go Environment
       uses: actions/setup-go@v5
