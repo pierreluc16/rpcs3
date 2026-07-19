@@ -64,7 +64,7 @@ jobs:
     # --- COMPILE & INSTALL SKOPEO ---
     - name: Clone, Build and Install Skopeo
       run: |
-        SKOPEO_TAG=$(git ls-remote --tags --refs https://github.com/containers/skopeo.git | awk '{print $2}' | awk -F/ '{print $3}' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1)
+        SKOPEO_TAG=$(git ls-remote --tags --refs https://github.com/containers/skopeo.git | sed 's|.*/||' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1)
         echo "Fetching Skopeo stable tag: $SKOPEO_TAG"
         git clone --depth 1 --branch "$SKOPEO_TAG" https://github.com/containers/skopeo.git skopeo
         cd skopeo
@@ -74,17 +74,17 @@ jobs:
     # --- COMPILE & INSTALL BUILDAH ---
     - name: Clone, Build and Install Buildah
       run: |
-        BUILDAH_TAG=$(git ls-remote --tags --refs https://github.com/containers/buildah.git | awk '{print $2}' | awk -F/ '{print $3}' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1)
+        BUILDAH_TAG=$(git ls-remote --tags --refs https://github.com/containers/buildah.git | sed 's|.*/||' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1)
         echo "Fetching Buildah stable tag: $BUILDAH_TAG"
         git clone --depth 1 --branch "$BUILDAH_TAG" https://github.com/containers/buildah.git buildah
         cd buildah
         make TAGS="seccomp" PREFIX=/usr/local
-        sudo make install PREFIX=/usr/local
+        sudo env "PATH=$PATH" make install PREFIX=/usr/local
 
     # --- COMPILE & INSTALL PODMAN ---
     - name: Clone, Build and Install Podman
       run: |
-        PODMAN_TAG=$(git ls-remote --tags --refs https://github.com/containers/podman.git | awk '{print $2}' | awk -F/ '{print $3}' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1)
+        PODMAN_TAG=$(git ls-remote --tags --refs https://github.com/containers/podman.git | sed 's|.*/||' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1)
         echo "Fetching Podman stable tag: $PODMAN_TAG"
         git clone --depth 1 --branch "$PODMAN_TAG" https://github.com/containers/podman.git podman
         cd podman
