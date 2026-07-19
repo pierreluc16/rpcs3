@@ -22,40 +22,43 @@ jobs:
 
         # Profile for Podman
         profile custom-podman /usr/bin/podman flags=(attach_disconnected) {
-          # Include standard system abstractions
           #include <abstractions/base>
           
           # Allow creating user namespaces under Ubuntu's restriction
           userns,
 
-          # Allow podman to re-exec itself and inherit this profile
+          # CRITICAL: Allow self re-exec via both standard path and procfs
           /usr/bin/podman ix,
+          owner /proc/self/exe ix,
 
-          # Capabilities and broad file access required for container management
+          # Target file and execution allowances
           capability,
           file,
           network,
+          audit deny /proc/self/exe rw,
         }
 
         # Profile for Buildah
         profile custom-buildah /usr/local/bin/buildah flags=(attach_disconnected) {
-          # Include standard system abstractions
           #include <abstractions/base>
 
           # Allow creating user namespaces under Ubuntu's restriction
           userns,
 
-          # Allow buildah to re-exec itself and inherit this profile
+          # CRITICAL: Allow self re-exec via both standard path and procfs
           /usr/local/bin/buildah ix,
+          owner /proc/self/exe ix,
 
-          # Capabilities and broad file access required for container management
+          # Target file and execution allowances
           capability,
           file,
           network,
+          audit deny /proc/self/exe rw,
         }
         EOF
         
-        # Reload AppArmor to enforce the updated profiles
+        # Explicitly parse the profile into the kernel and restart service
+        sudo apparmor_parser -r /etc/apparmor.d/custom_containers
         sudo systemctl restart apparmor
     - name: Setup Go Environment
       uses: actions/setup-go@v5
