@@ -44,34 +44,49 @@ jobs:
           uidmap \
           conmon \
           netavark \
-          containernetworking-plugins
+          containernetworking-plugins \
+          fuse-overlayfs
 
-    # --- COMPILE SKOPEO ---
+    # --- COMPILE & INSTALL SKOPEO ---
     - name: Clone, Build and Install Skopeo
       run: |
         git clone https://github.com/containers/skopeo.git skopeo
         cd skopeo
         make bin/skopeo
-        sudo cp bin/skopeo /usr/local/bin/skopeo
-        skopeo --version
+        sudo make install
 
-    # --- COMPILE BUILDAH ---
+    # --- COMPILE & INSTALL BUILDAH ---
     - name: Clone, Build and Install Buildah
       run: |
         git clone https://github.com/containers/buildah.git buildah
         cd buildah
-        make buildah TAGS="seccomp"
-        sudo cp bin/buildah /usr/local/bin/buildah
-        buildah --version
+        make TAGS="seccomp"
+        sudo make install
 
-    # --- COMPILE PODMAN ---
+    # --- COMPILE & INSTALL PODMAN ---
     - name: Clone, Build and Install Podman
       run: |
         git clone https://github.com/containers/podman.git podman
         cd podman
-        make podman TAGS="seccomp"
-        sudo cp bin/podman /usr/local/bin/podman
-        podman --version
+        make BUILDTAGS="seccomp systemd security" PREFIX=/usr
+        sudo env PATH=$PATH make install PREFIX=/usr
+
+    # --- CONFIGURE ROOTLESS ENVIRONMENT ---
+    - name: Configure Rootless Environment
+      run: |
+        # Ensure kernel is configured for ample user namespaces
+        sudo sysctl -w user.max_user_namespaces=28633
+        
+        # Setup local container configuration directories
+        mkdir -p ~/.config/containers
+        
+        # Force container tools to use fuse-overlayfs if native overlay breaks rootless namespaces
+        cat <<EOF > ~/.config/containers/storage.conf
+        [storage]
+        driver = "overlay"
+        [storage.options.overlay]
+        mount_program = "/usr/bin/fuse-overlayfs"
+        EOF
 
     # --- PIPELINE INTEGRATION TEST ---
     - name: 'Create Containerfile'
@@ -83,22 +98,20 @@ jobs:
         EOF
 
     - name: 'Build Image via Compiled Buildah'
-      continue-on-error: true
       run: |
-        sudo buildah bud -t localhost/ubuntu26-test:latest 
-        IMAGE_ID=$(sudo buildah images -q localhost/ubuntu26-test:latest)
+        buildah bud -t localhost/ubuntu26-test:latest .
+        IMAGE_ID=$(buildah images -q localhost/ubuntu26-test:latest)
         echo "BUILT_IMAGE_ID=$IMAGE_ID" >> $GITHUB_ENV
 
     - name: 'Run & Verify Image via Compiled Podman'
-      continue-on-error: true
       run: |
-        sudo podman images 
+        podman images 
         TARGET_IMAGE="${{ env.BUILT_IMAGE_ID }}"
         [ -z "$TARGET_IMAGE" ] && TARGET_IMAGE="localhost/ubuntu26-test:latest"
-        sudo podman run --rm "$TARGET_IMAGE" echo "Podman successfully ran this container" 
+        
+        # Override entrypoint so the container echoes our message instead of treating it as a URL for curl
+        podman run --rm --entrypoint echo "$TARGET_IMAGE" "Podman successfully ran rootless container!" 
 
     - name: 'Test Image Sync via Compiled Skopeo'
-      continue-on-error: true
-      run: skopeo copy docker://alpine:latest oci:local-alpine:latest
-
-    
+      run: |
+        skopeo copy docker://alpine:latest oci:local-alpine:latest
