@@ -119,3 +119,9 @@ jobs:
       continue-on-error: true
       run: |
         skopeo copy docker://alpine:latest oci:local-alpine:latest
+
+    # --- Fail because of v1 format error ---
+    - name: 'Fail because of v1 format error'
+      run: |
+        echo 'Error: "/etc/containers/registries.conf": registries.conf must be in v2 format but is in v1'
+        exit 1
