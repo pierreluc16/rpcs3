@@ -1,88 +1,18 @@
-name: Run Ubuntu 24.04 ARM64 in QEMU
+name: Test VXLAN on ARM64
 
 on: [push]
 
 jobs:
-  qemu-ubuntu-2404:
+  vxlan-test:
     runs-on: ubuntu-24.04-arm
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Install QEMU Tools & UEFI Firmware
+      - name: Run VXLAN Commands
         run: |
-          sudo apt-get update
-          sudo apt-get install -y qemu-system-arm qemu-utils cloud-image-utils qemu-efi-aarch64
-
-      - name: Download Ubuntu 24.04 Cloud Disk Image
-        run: |
-          # Download official Ubuntu 24.04 ARM64 Cloud Image
-          wget -q https://cloud-images.ubuntu.com/releases/24.04/release/ubuntu-24.04-server-cloudimg-arm64.img -O ubuntu-24.04.img
-
-          # Resize disk image to allow room for testing
-          qemu-img resize ubuntu-24.04.img +5G
-
-          # Prepare UEFI firmware image files required for ARM64 boot
-          truncate -s 64m efi.img
-          truncate -s 64m varstore.img
-          dd if=/usr/share/qemu-efi-aarch64/QEMU_EFI.fd of=efi.img conv=notrunc
-
-      - name: Create Cloud-Init Seed (Auto-login & Test Commands)
-        run: |
-          cat << 'EOF' > user-data
-          #cloud-config
-          password: ubuntu
-          chpasswd: { expire: False }
-          ssh_pwauth: True
-
-          # Print cloud-init output directly to the serial console log
-          output:
-            all: '| tee -a /dev/console'
-
-          write_files:
-            - path: /tmp/run_tests.sh
-              permissions: '0755'
-              content: |
-                #!/bin/bash
-                echo "=== EXECUTING TEST COMMANDS IN GUEST ==="
-
-                # Ensure kernel module for VXLAN is loaded
-                modprobe vxlan || true
-
-                # Execute network commands
-                ip link add vxlan-br type bridge || true
-                ip link set dev vxlan-br up || true
-                ip link add vx-test type vxlan id 101 remote 172.20.25.23 dev vxlan-br dstport 14788 || true
-                ip -d link show dev vx-test || true
-
-                echo "=== TESTS FINISHED — SHUTTING DOWN ==="
-                poweroff
-
-          runcmd:
-            - /tmp/run_tests.sh
-          EOF
-
-          touch meta-data
-          cloud-localds seed.img user-data meta-data
-
-      - name: Boot Ubuntu 24.04 VM in QEMU
-        run: |
-          # Detect hardware virtualization capabilities
-          if [ -e /dev/kvm ] && [ -w /dev/kvm ]; then
-            ACCEL_ARGS="-enable-kvm -cpu host"
-            echo "KVM device found! Booting with KVM hardware acceleration."
-          else
-            ACCEL_ARGS="-cpu cortex-a57"
-            echo "KVM not available on this runner. Falling back to software TCG emulation."
-          fi
-
-          timeout --foreground 10m qemu-system-aarch64 \
-            $ACCEL_ARGS \
-            -machine virt \
-            -m 2048 \
-            -smp 2 \
-            -drive if=pflash,format=raw,file=efi.img,readonly=on \
-            -drive if=pflash,format=raw,file=varstore.img \
-            -drive file=ubuntu-24.04.img,format=qcow2,if=virtio \
-            -drive file=seed.img,format=raw,if=virtio \
-            -nographic
+          sudo ip link add vxlan-br type bridge
+          sudo ip link set dev vxlan-br up
+          sudo ip link add vx-test type vxlan id 101 remote 172.20.25.23 dev vxlan-br dstport 14788
+          ip -d link show dev vx-test
+          echo "exit code: $?"
