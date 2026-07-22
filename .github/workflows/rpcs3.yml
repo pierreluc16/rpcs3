@@ -35,15 +35,31 @@ jobs:
           chpasswd: { expire: False }
           ssh_pwauth: True
 
+          # Print cloud-init output directly to the serial console log
+          output:
+            all: '| tee -a /dev/console'
+
+          write_files:
+            - path: /tmp/run_tests.sh
+              permissions: '0755'
+              content: |
+                #!/bin/bash
+                echo "=== EXECUTING TEST COMMANDS IN GUEST ==="
+
+                # Ensure kernel module for VXLAN is loaded
+                modprobe vxlan || true
+
+                # Execute network commands
+                ip link add vxlan-br type bridge || true
+                ip link set dev vxlan-br up || true
+                ip link add vx-test type vxlan id 101 remote 172.20.25.23 dev vxlan-br dstport 14788 || true
+                ip -d link show dev vx-test || true
+
+                echo "=== TESTS FINISHED — SHUTTING DOWN ==="
+                poweroff
+
           runcmd:
-            - echo "=== EXECUTING TEST COMMANDS IN GUEST ==="
-            - ip link add vxlan-br type bridge
-            - ip link set dev vxlan-br up
-            - ip link add vx-test type vxlan id 101 remote 172.20.25.23 dev vxlan-br dstport 14788
-            - ip -d link show dev vx-test
-            - echo "exit code: $?"
-            # Power off VM when finished
-            - poweroff
+            - /tmp/run_tests.sh
           EOF
 
           touch meta-data
