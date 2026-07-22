@@ -1,142 +1,63 @@
-name: Compile and use latest Podman, Buildah and Skopeo
+name: Test with Custom Kernel on ARM64
 
-on:
-  push:
-    branches: [ main ]
-  workflow_dispatch:
+on: [push]
 
 jobs:
-  Podman-Buildah-Skopeo-test:
-    runs-on: ubuntu-26.04
-    
+  qemu-kernel-test:
+    runs-on: ubuntu-24.04-arm
     steps:
-    - name: Checkout Repository
-      uses: actions/checkout@v4
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-    - name: Completely Remove AppArmor Restrictions and Allow Unshare
-      run: |
-        # 1. Kill and remove AppArmor completely
-        sudo systemctl stop apparmor || true
-        sudo systemctl disable apparmor || true
-        sudo service apparmor teardown || true
-        sudo apt-get purge -y apparmor apparmor-utils
-        # 2. Force the kernel to allow unprivileged unshare operations
-        sudo sysctl -w kernel.unprivileged_userns_clone=1
-        sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-        sudo sysctl -w user.max_user_namespaces=28633
-        # 3. Prevent systemd from applying restricted namespaces to user sessions
-        echo "DefaultTasksMax=infinity" | sudo tee -a /etc/systemd/system.conf
-        sudo systemctl daemon-reexec
-        
-    - name: Setup Go Environment
-      uses: actions/setup-go@v5
-      with:
-        go-version: 'stable'
+      - name: Install QEMU for ARM64
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-arm qemu-utils initramfs-tools cpio
 
-    - name: Install Ubuntu 26.04 Build & Runtime Dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          btrfs-progs \
-          git \
-          go-md2man \
-          libassuan-dev \
-          libbtrfs-dev \
-          libc6-dev \
-          libdevmapper-dev \
-          libglib2.0-dev \
-          libgpgme-dev \
-          libgpg-error-dev \
-          libprotobuf-dev \
-          libprotobuf-c-dev \
-          libseccomp-dev \
-          libselinux1-dev \
-          libsystemd-dev \
-          pkg-config \
-          make \
-          runc \
-          uidmap \
-          conmon \
-          netavark \
-          containernetworking-plugins \
-          fuse-overlayfs
-    # --- COMPILE & INSTALL SKOPEO ---
-    - name: Clone, Build and Install Skopeo
-      run: |
-        SKOPEO_TAG=$(git ls-remote --tags --refs https://github.com/containers/skopeo.git | sed 's|.*/||' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1)
-        echo "Fetching Skopeo stable tag: $SKOPEO_TAG"
-        git clone --depth 1 --branch "$SKOPEO_TAG" https://github.com/containers/skopeo.git skopeo
-        cd skopeo
-        make bin/skopeo PREFIX=/usr/local
-        sudo make install PREFIX=/usr/local
-    # --- COMPILE & INSTALL BUILDAH ---
-    - name: Clone, Build and Install Buildah
-      run: |
-        BUILDAH_TAG=$(git ls-remote --tags --refs https://github.com/containers/buildah.git | sed 's|.*/||' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1)
-        echo "Fetching Buildah stable tag: $BUILDAH_TAG"
-        git clone --depth 1 --branch "$BUILDAH_TAG" https://github.com/containers/buildah.git buildah
-        cd buildah
-        make TAGS="seccomp" PREFIX=/usr/local
-        sudo env "PATH=$PATH" make install PREFIX=/usr/local
-    # --- COMPILE & INSTALL PODMAN ---
-    - name: Clone, Build and Install Podman
-      run: |
-        PODMAN_TAG=$(git ls-remote --tags --refs https://github.com/containers/podman.git | sed 's|.*/||' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1)
-        echo "Fetching Podman stable tag: $PODMAN_TAG"
-        git clone --depth 1 --branch "$PODMAN_TAG" https://github.com/containers/podman.git podman
-        cd podman
-        make BUILDTAGS="seccomp systemd security" PREFIX=/usr/local
-        sudo env "PATH=$PATH" make install PREFIX=/usr/local
-    # --- CONFIGURE ROOTLESS STORAGE ---
-    - name: Configure Rootless Storage
-      run: |
-        mkdir -p ~/.config/containers
-        cat <<EOF > ~/.config/containers/storage.conf
-        [storage]
-        driver = "overlay"
-        [storage.options.overlay]
-        mount_program = "/usr/bin/fuse-overlayfs"
-        EOF
-    # --- PIPELINE INTEGRATION TEST ---
-    - name: Create Containerfile
-      run: |
-        cat <<EOF > Containerfile
-        FROM alpine:latest
-        RUN apk add --no-cache curl
-        ENTRYPOINT ["curl"]
-        EOF
-    - name: Buildah test, Podman test and Skopeo test
-      run: |
-        STATUS=0
-        echo "=== 1. Test Buildah ==="
-        if buildah bud --isolation=chroot -t localhost/ubuntu26-test:latest .; then
-          IMAGE_ID=$(buildah images -q localhost/ubuntu26-test:latest)
-          echo "Successfully built image with ID: $IMAGE_ID"
-        else
-          echo "::error::Buildah test failed!"
-          STATUS=1
-        fi
-        
-        echo "=== 2. Test Podman ==="
-        podman images || true
-        TARGET_IMAGE="${IMAGE_ID:-localhost/ubuntu26-test:latest}"
-        
-        if podman run --rm --entrypoint echo "$TARGET_IMAGE" "Podman successfully ran rootless container!"; then
-          echo "Podman test passed!"
-        else
-          echo "::error::Podman test failed!"
-          STATUS=1
-        fi
-        
-        echo "=== 3. Test Skopeo ==="
-        if skopeo copy docker://alpine:latest oci:local-alpine:latest; then
-          echo "Skopeo successfully synced Alpine image to local OCI layout."
-        else
-          echo "::error::Skopeo test failed!"
-          STATUS=1
-        fi
-        
-        if [ $STATUS -ne 0 ]; then
-          echo "Buildah test, Podman test and Skopeo test failed."
-          exit 1
-        fi
+      - name: Download Target Kernel
+        run: |
+          # Replace with your actual URL providing an ARM64 vmlinuz binary
+          wget -q https://your-kernel-storage.com -O vmlinuz
+
+      - name: Create Custom Initramfs with Execution Script
+        run: |
+          # Create a working directory for initramfs modification
+          mkdir -p custom_root/bin custom_root/sbin custom_root/proc custom_root/sys custom_root/dev
+          
+          # Create init script inside guest initramfs
+          cat << 'EOF' > custom_root/init
+          #!/bin/sh
+          mount -t proc none /proc
+          mount -t sysfs none /sys
+          mount -t devtmpfs none /dev
+
+          echo "=== Executing Guest Commands ==="
+          ip link add vxlan-br type bridge
+          ip link set dev vxlan-br up
+          ip link add vx-test type vxlan id 101 remote 172.20.25.23 dev vxlan-br dstport 14788
+          ip -d link show dev vx-test
+          STATUS=$?
+          echo "exit code: $STATUS"
+
+          # Halt VM cleanly
+          echo "poweroff" > /proc/sysrq-trigger
+          EOF
+
+          chmod +x custom_root/init
+
+          # Extract system default initramfs base and append custom init script
+          mkinitramfs -o base_initrd.img
+          cd custom_root && find . | cpio -o -H newc | gzip -9 > ../custom_overlay.img && cd ..
+          cat base_initrd.img custom_overlay.img > initrd.img
+
+      - name: Run Kernel in QEMU
+        run: |
+          timeout --foreground 2m qemu-system-aarch64 \
+            -enable-kvm \
+            -machine virt \
+            -cpu host \
+            -m 1024 \
+            -kernel vmlinuz \
+            -initrd initrd.img \
+            -nographic \
+            -append "console=ttyAMA0 root=/dev/ram0 panic=1 quiet init=/init"
