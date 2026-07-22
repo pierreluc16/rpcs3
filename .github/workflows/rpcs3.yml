@@ -12,43 +12,37 @@ jobs:
       - name: Install QEMU for ARM64
         run: |
           sudo apt-get update
-          sudo apt-get install -y qemu-system-arm qemu-utils initramfs-tools cpio
+          sudo apt-get install -y qemu-system-arm qemu-utils initramfs-tools iproute2
 
       - name: Download Target Kernel
         run: |
           # Replace with your actual URL providing an ARM64 vmlinuz binary
           wget -q https://your-kernel-storage.com -O vmlinuz
 
-      - name: Create Custom Initramfs with Execution Script
+      - name: Prepare Guest Test Script
         run: |
-          # Create a working directory for initramfs modification
-          mkdir -p custom_root/bin custom_root/sbin custom_root/proc custom_root/sys custom_root/dev
-          
-          # Create init script inside guest initramfs
-          cat << 'EOF' > custom_root/init
-          #!/bin/sh
-          mount -t proc none /proc
-          mount -t sysfs none /sys
-          mount -t devtmpfs none /dev
+          # Create custom initramfs local script
+          sudo mkdir -p /etc/initramfs-tools/scripts/init-bottom
 
-          echo "=== Executing Guest Commands ==="
+          cat << 'EOF' | sudo tee /etc/initramfs-tools/scripts/init-bottom/run_tests.sh
+          #!/bin/sh
+          PREREQ=""
+          prereqs() { echo "$PREREQ"; }
+          case $1 in prereqs) prereqs; exit 0;; esac
+
+          echo "=== EXECUTING TEST COMMANDS IN QEMU ==="
           ip link add vxlan-br type bridge
           ip link set dev vxlan-br up
           ip link add vx-test type vxlan id 101 remote 172.20.25.23 dev vxlan-br dstport 14788
           ip -d link show dev vx-test
-          STATUS=$?
-          echo "exit code: $STATUS"
+          echo "exit code: $?"
 
-          # Halt VM cleanly
-          echo "poweroff" > /proc/sysrq-trigger
+          # Shut down QEMU after running commands
+          echo b > /proc/sysrq-trigger
           EOF
 
-          chmod +x custom_root/init
-
-          # Extract system default initramfs base and append custom init script
-          mkinitramfs -o base_initrd.img
-          cd custom_root && find . | cpio -o -H newc | gzip -9 > ../custom_overlay.img && cd ..
-          cat base_initrd.img custom_overlay.img > initrd.img
+          sudo chmod +x /etc/initramfs-tools/scripts/init-bottom/run_tests.sh
+          mkinitramfs -o initrd.img
 
       - name: Run Kernel in QEMU
         run: |
@@ -60,4 +54,4 @@ jobs:
             -kernel vmlinuz \
             -initrd initrd.img \
             -nographic \
-            -append "console=ttyAMA0 root=/dev/ram0 panic=1 quiet init=/init"
+            -append "console=ttyAMA0 root=/dev/ram0 panic=1 quiet"
