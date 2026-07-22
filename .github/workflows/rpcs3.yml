@@ -9,26 +9,26 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Install QEMU Tools
+      - name: Install QEMU Tools & UEFI Firmware
         run: |
           sudo apt-get update
-          sudo apt-get install -y qemu-system-arm qemu-utils cloud-image-utils
+          sudo apt-get install -y qemu-system-arm qemu-utils cloud-image-utils qemu-efi-aarch64
 
-      - name: Download Ubuntu 24.04 Kernel, Initrd, and Cloud Disk Image
+      - name: Download Ubuntu 24.04 Cloud Disk Image
         run: |
-          # 1. Download official Ubuntu 24.04 netboot ARM64 kernel & initrd
-          wget -q https://cdimage.ubuntu.com/ubuntu/releases/24.04/release/netboot/arm64/linux -O vmlinuz
-          wget -q https://cdimage.ubuntu.com/ubuntu/releases/24.04/release/netboot/arm64/initrd -O initrd.img
-
-          # 2. Download official Ubuntu 24.04 ARM64 Cloud Image
+          # Download official Ubuntu 24.04 ARM64 Cloud Image
           wget -q https://cloud-images.ubuntu.com/releases/24.04/release/ubuntu-24.04-server-cloudimg-arm64.img -O ubuntu-24.04.img
 
-          # 3. Resize disk image to allow room for testing
+          # Resize disk image to allow room for testing
           qemu-img resize ubuntu-24.04.img +5G
+
+          # Prepare UEFI firmware image files required for ARM64 boot
+          truncate -s 64m efi.img
+          truncate -s 64m varstore.img
+          dd if=/usr/share/qemu-efi-aarch64/QEMU_EFI.fd of=efi.img conv=notrunc
 
       - name: Create Cloud-Init Seed (Auto-login & Test Commands)
         run: |
-          # Configure cloud-init to run your guest script automatically on boot
           cat << 'EOF' > user-data
           #cloud-config
           password: ubuntu
@@ -42,7 +42,7 @@ jobs:
             - ip link add vx-test type vxlan id 101 remote 172.20.25.23 dev vxlan-br dstport 14788
             - ip -d link show dev vx-test
             - echo "exit code: $?"
-            # Gracefully power off VM when finished
+            # Power off VM when finished
             - poweroff
           EOF
 
@@ -65,9 +65,8 @@ jobs:
             -machine virt \
             -m 2048 \
             -smp 2 \
-            -kernel vmlinuz \
-            -initrd initrd.img \
+            -drive if=pflash,format=raw,file=efi.img,readonly=on \
+            -drive if=pflash,format=raw,file=varstore.img \
             -drive file=ubuntu-24.04.img,format=qcow2,if=virtio \
             -drive file=seed.img,format=raw,if=virtio \
-            -nographic \
-            -append "console=ttyAMA0 root=/dev/vda1 rw panic=-1"
+            -nographic
