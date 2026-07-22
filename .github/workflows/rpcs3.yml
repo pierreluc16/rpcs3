@@ -51,10 +51,18 @@ jobs:
 
       - name: Boot Ubuntu 24.04 VM in QEMU
         run: |
-          timeout --foreground 5m qemu-system-aarch64 \
-            -enable-kvm \
+          # Detect hardware virtualization capabilities
+          if [ -e /dev/kvm ] && [ -w /dev/kvm ]; then
+            ACCEL_ARGS="-enable-kvm -cpu host"
+            echo "KVM device found! Booting with KVM hardware acceleration."
+          else
+            ACCEL_ARGS="-cpu cortex-a57"
+            echo "KVM not available on this runner. Falling back to software TCG emulation."
+          fi
+
+          timeout --foreground 10m qemu-system-aarch64 \
+            $ACCEL_ARGS \
             -machine virt \
-            -cpu host \
             -m 2048 \
             -smp 2 \
             -kernel vmlinuz \
