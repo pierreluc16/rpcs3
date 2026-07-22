@@ -1,57 +1,65 @@
-name: Test with Custom Kernel on ARM64
+name: Run Ubuntu 24.04 ARM64 in QEMU
 
 on: [push]
 
 jobs:
-  qemu-kernel-test:
+  qemu-ubuntu-2404:
     runs-on: ubuntu-24.04-arm
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Install QEMU for ARM64
+      - name: Install QEMU Tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y qemu-system-arm qemu-utils initramfs-tools iproute2
+          sudo apt-get install -y qemu-system-arm qemu-utils cloud-image-utils
 
-      - name: Download Target Kernel
+      - name: Download Ubuntu 24.04 Kernel, Initrd, and Cloud Disk Image
         run: |
-          # Replace with your actual URL providing an ARM64 vmlinuz binary
-          wget -q https://your-kernel-storage.com -O vmlinuz
+          # 1. Download official Ubuntu 24.04 netboot ARM64 kernel & initrd
+          wget -q https://cdimage.ubuntu.com/ubuntu/releases/24.04/release/netboot/arm64/linux -O vmlinuz
+          wget -q https://cdimage.ubuntu.com/ubuntu/releases/24.04/release/netboot/arm64/initrd -O initrd.img
 
-      - name: Prepare Guest Test Script
+          # 2. Download official Ubuntu 24.04 ARM64 Cloud Image
+          wget -q https://cloud-images.ubuntu.com/releases/24.04/release/ubuntu-24.04-server-cloudimg-arm64.img -O ubuntu-24.04.img
+
+          # 3. Resize disk image to allow room for testing
+          qemu-img resize ubuntu-24.04.img +5G
+
+      - name: Create Cloud-Init Seed (Auto-login & Test Commands)
         run: |
-          # Create custom initramfs local script
-          sudo mkdir -p /etc/initramfs-tools/scripts/init-bottom
+          # Configure cloud-init to run your guest script automatically on boot
+          cat << 'EOF' > user-data
+          #cloud-config
+          password: ubuntu
+          chpasswd: { expire: False }
+          ssh_pwauth: True
 
-          cat << 'EOF' | sudo tee /etc/initramfs-tools/scripts/init-bottom/run_tests.sh
-          #!/bin/sh
-          PREREQ=""
-          prereqs() { echo "$PREREQ"; }
-          case $1 in prereqs) prereqs; exit 0;; esac
-
-          echo "=== EXECUTING TEST COMMANDS IN QEMU ==="
-          ip link add vxlan-br type bridge
-          ip link set dev vxlan-br up
-          ip link add vx-test type vxlan id 101 remote 172.20.25.23 dev vxlan-br dstport 14788
-          ip -d link show dev vx-test
-          echo "exit code: $?"
-
-          # Shut down QEMU after running commands
-          echo b > /proc/sysrq-trigger
+          runcmd:
+            - echo "=== EXECUTING TEST COMMANDS IN GUEST ==="
+            - ip link add vxlan-br type bridge
+            - ip link set dev vxlan-br up
+            - ip link add vx-test type vxlan id 101 remote 172.20.25.23 dev vxlan-br dstport 14788
+            - ip -d link show dev vx-test
+            - echo "exit code: $?"
+            # Gracefully power off VM when finished
+            - poweroff
           EOF
 
-          sudo chmod +x /etc/initramfs-tools/scripts/init-bottom/run_tests.sh
-          mkinitramfs -o initrd.img
+          touch meta-data
+          cloud-localds seed.img user-data meta-data
 
-      - name: Run Kernel in QEMU
+      - name: Boot Ubuntu 24.04 VM in QEMU
         run: |
-          timeout --foreground 2m qemu-system-aarch64 \
+          timeout --foreground 5m qemu-system-aarch64 \
             -enable-kvm \
             -machine virt \
             -cpu host \
-            -m 1024 \
+            -m 2048 \
+            -smp 2 \
             -kernel vmlinuz \
             -initrd initrd.img \
+            -drive file=ubuntu-24.04.img,format=qcow2,if=virtio \
+            -drive file=seed.img,format=raw,if=virtio \
             -nographic \
-            -append "console=ttyAMA0 root=/dev/ram0 panic=1 quiet"
+            -append "console=ttyAMA0 root=/dev/vda1 rw panic=-1"
