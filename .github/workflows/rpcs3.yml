@@ -17,7 +17,7 @@ jobs:
 
       - name: Download and install exact iproute2 version
         run: |
-          wget http://launchpadlibrarian.net/741870701/iproute2_6.1.0-1ubuntu6.2_amd64.deb
+          wget http://archive.ubuntu.com/ubuntu/pool/main/i/iproute2/iproute2_6.1.0-1ubuntu6.2_amd64.deb
           sudo dpkg -i --force-downgrade iproute2_6.1.0-1ubuntu6.2_amd64.deb
 
       - name: Run VXLAN configuration
