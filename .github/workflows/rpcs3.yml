@@ -1,18 +1,28 @@
-name: VXLAN Test
+name: Capture d'écran du Bureau
 
+# Déclencheur : s'exécute manuellement depuis l'onglet Actions de GitHub
 on:
-  push:
-  pull_request:
   workflow_dispatch:
 
 jobs:
-  test-vxlan:
-    runs-on: ubuntu-24.04-arm
+  take-screenshot:
+    name: Capturer le bureau du serveur
+    runs-on: windows-latest # Windows intègre nativement la gestion de l'affichage de bureau
 
     steps:
-      - run: |
-          sudo ip link add vxlan-br type bridge
-          sudo ip link set dev vxlan-br up
-          sudo ip link add vx-test type vxlan id 101 remote 172.20.25.23 dev vxlan-br dstport 14788
-          ip -d link show dev vx-test
-          echo "exit code: $?"
+      # Étape 1 : Récupérer le code (nécessaire pour initialiser l'espace de travail)
+      - name: Récupérer le dépôt
+        uses: actions/checkout@v4
+
+      # Étape 2 : Prendre la capture d'écran du bureau virtuel
+      - name: Capturer le bureau
+        uses: OrbitalOwen/desktop-screenshot-action@0.1
+        with:
+          file-name: 'bureau_runner.jpg'
+
+      # Étape 3 : Envoyer l'image vers GitHub pour que vous puissiez la télécharger
+      - name: Sauvegarder l'image (Artifact)
+        uses: actions/upload-artifact@v4
+        with:
+          name: Capture-Bureau-Windows
+          path: bureau_runner.jpg
