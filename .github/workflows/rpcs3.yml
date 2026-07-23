@@ -1,4 +1,4 @@
-name: VXLAN Bridge Test
+name: VXLAN Bridge Test (ARM64)
 
 on:
   push:
@@ -9,16 +9,16 @@ on:
 
 jobs:
   test-vxlan:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-24.04-arm
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Download and install exact iproute2 version
+      - name: Download and install exact iproute2 ARM64 version
         run: |
-          wget http://snapshot.ubuntu.com/ubuntu/20250801T000000Z/pool/main/i/iproute2/iproute2_6.1.0-1ubuntu6.2_amd64.deb
-          sudo dpkg -i --force-downgrade iproute2_6.1.0-1ubuntu6.2_amd64.deb
+          wget http://snapshot.ubuntu.com/ubuntu/20250801T000000Z/pool/main/i/iproute2/iproute2_6.1.0-1ubuntu6.2_arm64.deb
+          sudo dpkg -i --force-downgrade iproute2_6.1.0-1ubuntu6.2_arm64.deb
 
       - name: Run VXLAN configuration
         run: |
