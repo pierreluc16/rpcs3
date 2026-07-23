@@ -1,24 +1,16 @@
-name: setup-node
+name: Ubuntu System Update Workflow
 
 on:
-  pull_request:
+  # Allows manual triggering from the GitHub Actions tab
   workflow_dispatch:
 
-permissions:
-  contents: read
-
 jobs:
-  test:
-    runs-on: ${{ matrix.os }}
-
-    strategy:
-      matrix:
-        node-version: ['24.x', '24', '']
-        os: [ubuntu-slim, ubuntu-latest]
+  update-system:
+    runs-on: ubuntu-24.04
 
     steps:
-      - uses: actions/setup-node@v6
-        with:
-          node-version: ${{ matrix.node-version }}
-      
-      - run: node -v
+      - name: Print Kernel Version
+        run: uname -r
+
+      - name: Run Update and Upgrade
+        run: sudo apt update && sudo apt upgrade -y
