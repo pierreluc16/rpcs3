@@ -1,8 +1,10 @@
-name: VXLAN Test
+name: VXLAN Bridge Test
 
 on:
   push:
+    branches: [ "main" ]
   pull_request:
+    branches: [ "main" ]
   workflow_dispatch:
 
 jobs:
@@ -10,7 +12,16 @@ jobs:
     runs-on: ubuntu-24.04
 
     steps:
-      - run: |
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download and install exact iproute2 version
+        run: |
+          wget http://snapshot.ubuntu.com/ubuntu/20250801T000000Z/pool/main/i/iproute2/iproute2_6.1.0-1ubuntu6.2_amd64.deb
+          sudo dpkg -i --force-downgrade iproute2_6.1.0-1ubuntu6.2_amd64.deb
+
+      - name: Run VXLAN configuration
+        run: |
           sudo ip link add vxlan-br type bridge
           sudo ip link set dev vxlan-br up
           sudo ip link add vx-test type vxlan id 101 remote 172.20.25.23 dev vxlan-br dstport 14788
