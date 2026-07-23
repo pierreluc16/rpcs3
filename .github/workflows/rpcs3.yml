@@ -7,7 +7,7 @@ on:
 
 jobs:
   docker_build:
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-24.04
 
     steps:
       - name: docker version
