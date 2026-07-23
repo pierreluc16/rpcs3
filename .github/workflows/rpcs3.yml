@@ -15,10 +15,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Downgrade iproute2
+      - name: Download and install exact iproute2 version
         run: |
-          sudo apt-get update
-          sudo apt-get install --allow-downgrades -y iproute2=6.1.0-1ubuntu6.2
+          wget http://launchpadlibrarian.net/741870701/iproute2_6.1.0-1ubuntu6.2_amd64.deb
+          sudo dpkg -i --force-downgrade iproute2_6.1.0-1ubuntu6.2_amd64.deb
 
       - name: Run VXLAN configuration
         run: |
