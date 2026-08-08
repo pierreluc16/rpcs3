@@ -1,29 +1,29 @@
-name: CI on Ubuntu ARM64
+name: CI on Ubuntu AMD64
 
 on:
   push:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
-  workflow_dispatch:
+  workflow_dispatch: # Ajout du déclenchement manuel (bouton "Run workflow" sur GitHub)
 
 jobs:
   build:
-    # Utilisation de l'exécuteur Ubuntu 24.04 ARM natif de GitHub
+    # Utilisation de l'exécuteur Ubuntu standard (x86_64 / amd64)
     runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Download Google Chrome arm64 .deb
+      - name: Download Google Chrome amd64 .deb
         run: |
-          curl -LO https://dl.google.com/linux/direct/google-chrome-stable_current_arm64.deb
+          curl -LO https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
 
       - name: Install Google Chrome and Dependencies
         run: |
           sudo apt-get update
-          # apt-get install gère automatiquement l'installation des dépendances manquantes locales
+          # apt-get gère automatiquement l'installation des dépendances manquantes locales
           sudo apt-get install -y ./google-chrome-stable_current_amd64.deb
 
       - name: Verify Google Chrome Version
